@@ -89,7 +89,19 @@
       font-family: Arial, Helvetica, sans-serif
     }
 
+    /* On handheld devices the same top-right control directly saves a canonical PNG. */
     html.tif-handheld #export-control {
+      display: block !important;
+      right: max(12px, env(safe-area-inset-right));
+      top: max(12px, env(safe-area-inset-top))
+    }
+
+    html.tif-handheld #export-button {
+      width: 48px;
+      height: 48px
+    }
+
+    html.tif-handheld #export-menu {
       display: none !important
     }
 
@@ -739,7 +751,6 @@
     </button>
     <div id="export-menu" hidden>
       <button type="button" data-export="png">Picture (PNG)</button>
-      <button type="button" data-export="svg">Vector (SVG)</button>
       <button type="button" data-export="pdf">PDF</button>
     </div>
   </div>
@@ -839,7 +850,7 @@
         // no-cors sends the request but cannot confirm that the Sheet was updated.
         await fetch(TIF_FEEDBACK_ENDPOINT, { method: 'POST', mode: 'no-cors', redirect: 'follow', body: formBody, cache: 'no-store' });
         feedbackText.value = '';
-        feedbackMessage('Your feedback was sent. Thank you.', 'success');
+        feedbackMessage('Your feedback was sent for processing. Thank you.', 'success');
       } catch (err) {
         feedbackMessage('Could not send feedback. Please check your connection and try again.', 'error');
       } finally {
@@ -1572,6 +1583,17 @@
     function closeExportMenu() { exportMenu.hidden = true; exportButton.setAttribute('aria-expanded', 'false'); }
     exportButton.addEventListener('click', e => {
       e.stopPropagation();
+      if (document.documentElement.classList.contains('tif-handheld')) {
+        closeExportMenu();
+        if (mobileExportBusy || labelsAnimating) return;
+        mobileExportBusy = true;
+        exportButton.disabled = true;
+        exportCanonicalMobilePNG().catch(err => {
+          console.error('Mobile PNG export failed', err);
+          alert('The PNG could not be saved. Please try again.');
+        }).finally(() => { mobileExportBusy = false; exportButton.disabled = false; });
+        return;
+      }
       exportMenu.hidden = !exportMenu.hidden;
       exportButton.setAttribute('aria-expanded', String(!exportMenu.hidden));
     });
@@ -1599,26 +1621,106 @@
       anchor.href = url; anchor.download = filename; document.body.appendChild(anchor);
       anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1500);
     }
-    function exportSVG() {
-      saveBlob(new Blob([snapshotSvg()], { type: 'image/svg+xml;charset=utf-8' }), 'TIF-diagram.svg');
-    }
     async function exportPNG() {
-      const xml = snapshotSvg();
+      const { xml, pixelW, pixelH } = canonicalDiagramSVG();
       const url = URL.createObjectURL(new Blob([xml], { type: 'image/svg+xml;charset=utf-8' }));
       try {
         const img = new Image();
         await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = url; });
-        const screen = svg.getBoundingClientRect();
-        const scale = Math.min(3, 4096 / Math.max(screen.width, screen.height));
-        const w = Math.max(1, Math.round(screen.width * scale));
-        const h = Math.max(1, Math.round(screen.height * scale));
-        const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+        const canvas = document.createElement('canvas');
+        canvas.width = pixelW; canvas.height = pixelH;
         const ctx2 = canvas.getContext('2d');
-        ctx2.fillStyle = '#fff'; ctx2.fillRect(0, 0, w, h);
-        ctx2.drawImage(img, 0, 0, w, h);
+        if (!ctx2) throw Error('Canvas unavailable');
+        ctx2.fillStyle = '#fff'; ctx2.fillRect(0, 0, pixelW, pixelH);
+        ctx2.drawImage(img, 0, 0, pixelW, pixelH);
         const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
         if (!blob) throw Error('PNG encoding was unavailable');
-        saveBlob(blob, 'TIF-diagram.png');
+        const filename = focused === null ? 'TIF-diagram.png' : 'TIF-expanded-diagram.png';
+        saveBlob(blob, filename);
+      } finally { URL.revokeObjectURL(url); }
+    }
+    // Handheld export is independent of the current screen rotation, pan, zoom,
+    // browser aspect ratio, and viewport. Only the selected hierarchy is retained.
+    // Each download of the same focus uses the same canonical (zero-degree) SVG.
+    let mobileExportBusy = false;
+    function canonicalDiagramSVG() {
+      const previousRotation = rotation;
+      let clone, minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      try {
+        // Both updates are synchronous and occur before the browser next paints.
+        // This also ensures labels' uprightness and textPath direction are those
+        // of the canonical, unrotated chart rather than the user's last rotation.
+        rotation = 0;
+        render(current);
+        for (const n of NODES) {
+          const el = elements.get(n.id);
+          if (!el || Number(el.g.getAttribute('opacity')) < 0.5 || !el.path.getAttribute('d')) continue;
+          const b = el.path.getBBox();
+          if (!b.width || !b.height) continue;
+          minX = Math.min(minX, b.x); minY = Math.min(minY, b.y);
+          maxX = Math.max(maxX, b.x + b.width); maxY = Math.max(maxY, b.y + b.height);
+        }
+        // Never clip the white circle or its stationary two-line title.
+        minX = Math.min(minX, C - CENTER); maxX = Math.max(maxX, C + CENTER);
+        minY = Math.min(minY, C - CENTER); maxY = Math.max(maxY, C + CENTER);
+        clone = svg.cloneNode(true);
+      } finally {
+        rotation = previousRotation;
+        render(current);
+      }
+      if (!clone || !Number.isFinite(minX) || !Number.isFinite(maxX)) throw Error('No visible diagram to export');
+      const contentW = maxX - minX, contentH = maxY - minY;
+      // Fixed 3% padding on each side of its own axis. Equal left/right margins,
+      // equal top/bottom margins, with no forced square or shape distortion.
+      const padX = Math.max(20, contentW * .03), padY = Math.max(20, contentH * .03);
+      const x = minX - padX, y = minY - padY, w = contentW + padX * 2, h = contentH + padY * 2;
+      clone.setAttribute('viewBox', `${x} ${y} ${w} ${h}`);
+      clone.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+      // The original full-canvas background must not be retained as an invisible
+      // source of large surrounding margins.
+      const backdrop = clone.querySelector('rect');
+      if (backdrop) backdrop.remove();
+      const bg = document.createElementNS(NS, 'rect');
+      bg.setAttribute('x', String(x)); bg.setAttribute('y', String(y));
+      bg.setAttribute('width', String(w)); bg.setAttribute('height', String(h));
+      bg.setAttribute('fill', '#fff');
+      clone.insertBefore(bg, clone.firstChild);
+      // SVG raster dimensions respect the non-square content bounding rectangle.
+      const maxPixels = 4096;
+      const scale = maxPixels / Math.max(w, h);
+      const pixelW = Math.max(1, Math.round(w * scale));
+      const pixelH = Math.max(1, Math.round(h * scale));
+      clone.setAttribute('width', String(pixelW));
+      clone.setAttribute('height', String(pixelH));
+      return { xml: new XMLSerializer().serializeToString(clone), pixelW, pixelH, bounds: { x, y, w, h }, contentBounds: { minX, minY, maxX, maxY } };
+    }
+    async function exportCanonicalMobilePNG() {
+      const { xml, pixelW, pixelH } = canonicalDiagramSVG();
+      const url = URL.createObjectURL(new Blob([xml], { type: 'image/svg+xml;charset=utf-8' }));
+      try {
+        const img = new Image();
+        await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = url; });
+        const canvas = document.createElement('canvas');
+        canvas.width = pixelW; canvas.height = pixelH;
+        const c = canvas.getContext('2d');
+        if (!c) throw Error('Canvas unavailable');
+        c.fillStyle = '#fff'; c.fillRect(0, 0, pixelW, pixelH);
+        c.drawImage(img, 0, 0, pixelW, pixelH);
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        if (!blob) throw Error('Could not encode PNG');
+        const filename = focused === null ? 'TIF-diagram.png' : 'TIF-expanded-diagram.png';
+        // On iOS/iPadOS, the native share sheet is the most reliable way to save
+        // an image to Photos or Files. Other browsers use the normal download.
+        if (typeof navigator.share === 'function' && typeof navigator.canShare === 'function') {
+          const file = new File([blob], filename, { type: 'image/png' });
+          if (navigator.canShare({ files: [file] })) {
+            try { await navigator.share({ files: [file], title: 'Test Information Framework' }); return; }
+            catch (err) { if (err && err.name === 'AbortError') return; }
+          }
+        }
+        saveBlob(blob, filename);
       } finally { URL.revokeObjectURL(url); }
     }
     function pdfSnapshotSvg() {
@@ -1693,8 +1795,7 @@
       const choice = e.target.closest('button[data-export]');
       if (!choice) return;
       closeExportMenu();
-      if (choice.dataset.export === 'svg') exportSVG();
-      else if (choice.dataset.export === 'png') exportPNG().catch(err => { console.error(err); alert('Could not export PNG. Please try SVG.'); });
+      if (choice.dataset.export === 'png') exportPNG().catch(err => { console.error(err); alert('Could not export PNG. Please try again.'); });
       else if (choice.dataset.export === 'pdf') exportPDF();
     });
   </script>
