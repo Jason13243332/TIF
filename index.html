@@ -1,899 +1,1703 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<script>
-// Phones and tablets get the same interactive diagram without publication/export controls.
-// Modern iPadOS can identify itself as a Macintosh, so account for touch-capable iPads.
-(function(){
-  const ua=navigator.userAgent||'';
-  const mobileOrTablet=/Android|iPhone|iPad|iPod|Mobile|Tablet|Silk|Kindle|PlayBook/i.test(ua);
-  const desktopModeIPad=/Macintosh/i.test(ua) && navigator.maxTouchPoints>1;
-  if(mobileOrTablet||desktopModeIPad)document.documentElement.classList.add('tif-handheld');
-})();
-</script>
-<title>Test Information Framework (TIF)</title>
-<style>
-*{box-sizing:border-box;user-select:none!important;-webkit-user-select:none!important;-moz-user-select:none!important;-webkit-touch-callout:none}
-html,body{margin:0;width:100%;height:100%;font-family:Arial,Helvetica,sans-serif;background:#fff}
-#stage{height:100vh;width:100vw;overflow:hidden;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none}
-#stage.dragging{cursor:grabbing}
-#diagram{display:block;width:100%;height:100%}
-.node{cursor:pointer}
-.node path{transition:stroke-width .14s ease}
-.node:hover path{stroke-width:5}
-.node text,#centre text{pointer-events:none;user-select:none;-webkit-user-select:none}
-.node text{transition:font-size .38s ease}
-#centre{cursor:pointer}
-#export-control{position:fixed;right:18px;top:18px;z-index:30;font-family:Arial,Helvetica,sans-serif}
-html.tif-handheld #export-control{display:none!important}
-#export-button{width:43px;height:43px;display:grid;place-items:center;background:#fff;color:#172b42;border:1px solid #d8dde5;border-radius:12px;box-shadow:0 2px 9px #14253b1e;cursor:pointer}
-#export-button:hover,#export-button:focus-visible{background:#f2f5f9;outline:2px solid transparent}
-#export-button svg{width:21px;height:21px}
-#export-menu{position:absolute;right:0;top:50px;width:150px;padding:5px;background:white;border:1px solid #d8dde5;border-radius:12px;box-shadow:0 6px 22px #14253b26}
-#export-menu[hidden]{display:none}
-#export-menu button{display:block;width:100%;border:0;border-radius:7px;background:transparent;color:#182b3e;text-align:left;padding:11px 12px;font:14px Arial,Helvetica,sans-serif;cursor:pointer}
-#export-menu button:hover,#export-menu button:focus-visible{background:#eef3f9}
-@media print{#export-control{display:none!important}#stage{height:100vh!important}}
+<html lang="en">
 
-/* Hover note belongs to the sector, not its screen location. */
-#tif-note-popup[hidden]{display:none!important}
-#tif-note-popup{--note-accent:#6c8fb0;position:fixed;left:0;top:0;z-index:25;width:max-content;min-width:min(280px,calc(100vw - 24px));max-width:min(420px,calc(100vw - 24px));max-height:min(55vh,420px);overflow:auto;padding:12px 14px;background:#fff;color:#192a40;border:1px solid #d7dfe9;border-radius:4px;box-shadow:0 8px 24px #0b253b22;pointer-events:none;white-space:normal;line-height:1.4;font:14px Arial,Helvetica,sans-serif;text-align:left}
-#tif-note-title{display:flex;align-items:center;gap:20px;min-height:26px;padding:3px 0;font-weight:700;overflow-wrap:break-word;word-break:normal;color:var(--note-accent)}
-#tif-note-title::before{content:"";display:block;flex:0 0 7px;align-self:stretch;background:var(--note-accent);border-radius:4px;pointer-events:none}
-#tif-note-body{margin:7px 0 0 27px;white-space:pre-wrap;overflow-wrap:break-word;word-break:normal;border-top:1px solid #e7edf4;padding-top:7px}
-#tif-note-body:empty{display:none}
-@media print{#tif-note-popup{display:none!important}}
-/* Touch-only adaptations; mouse and trackpad rules above are retained. */
-#touch-note-close{display:none}
-@media (pointer:coarse){
-  #stage{height:100dvh;min-height:100vh;touch-action:none}
-  #export-control{right:max(12px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top))}
-  #export-button{width:50px;height:50px}
-  #export-menu{top:56px;width:190px;max-width:calc(100vw - 24px)}
-  #export-menu button{font-size:16px;padding:14px 15px;min-height:48px}
-  #tif-note-popup{max-width:calc(100vw - 24px);max-height:min(60dvh,480px);font-size:15px;pointer-events:auto;touch-action:pan-y;overflow:auto;padding-right:36px}
-  #tif-note-title{padding-right:6px}
-  #touch-note-close{display:grid;place-items:center;position:absolute;right:6px;top:6px;width:30px;height:30px;border:0;background:transparent;color:#43566e;font-size:22px;line-height:1;cursor:pointer}
-}
-@media (max-width:420px){#tif-note-popup{min-width:min(280px,calc(100vw - 24px));max-width:calc(100vw - 24px)}}
-</style></head><body>
-<div id="export-control">
-<button id="export-button" type="button" title="Export diagram" aria-label="Export diagram" aria-haspopup="true" aria-expanded="false">
-<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4"/><path d="M4 16v4h16v-4"/></svg>
-</button>
-<div id="export-menu" hidden>
-<button type="button" data-export="png">Picture (PNG)</button>
-<button type="button" data-export="svg">Vector (SVG)</button>
-<button type="button" data-export="pdf">PDF</button>
-</div>
-</div>
-<div id="tif-note-popup" hidden role="tooltip"><button id="touch-note-close" type="button" aria-label="Close note">×</button><div id="tif-note-title"></div><div id="tif-note-body"></div></div>
-<div id="stage"><svg id="diagram" xmlns="http://www.w3.org/2000/svg" width="6620" height="6620" viewBox="0 0 6620 6620">
-<rect x="0" y="0" width="6620" height="6620" fill="white"/>
-<defs id="arc-defs"></defs><g id="rotator"><g id="sectors"></g></g>
-<g id="centre"><circle cx="3310.0" cy="3310.0" r="420" fill="white" stroke="white" stroke-width="3"/>
-<text x="3310.0" y="3285.0" text-anchor="middle" font-size="56" font-weight="700" fill="#111">Test Information Framework</text>
-<text x="3310.0" y="3352.0" text-anchor="middle" font-size="56" font-weight="700" fill="#111">(TIF)</text>
-</g></svg></div>
-<script>
-'use strict';
-const NODES=[{"id": 0, "parent": null, "name": "Test content", "level": 1, "hue": 212, "color": "#0f3057", "weight": 25.0, "children": [1, 2, 7, 8, 13, 31], "note": ""}, {"id": 1, "parent": 0, "name": "Mode of delivery", "level": 2, "hue": 212, "color": "#174375", "weight": 1.0, "children": [], "note": ""}, {"id": 2, "parent": 0, "name": "Test structure", "level": 2, "hue": 212, "color": "#174375", "weight": 4.0, "children": [3, 4, 5, 6], "note": ""}, {"id": 3, "parent": 2, "name": "Number of sections", "level": 3, "hue": 212, "color": "#205592", "weight": 1.0, "children": [], "note": ""}, {"id": 4, "parent": 2, "name": "Task/Item type in each section", "level": 3, "hue": 212, "color": "#205592", "weight": 1.0, "children": [], "note": ""}, {"id": 5, "parent": 2, "name": "Number of tasks/items per section", "level": 3, "hue": 212, "color": "#205592", "weight": 1.0, "children": [], "note": ""}, {"id": 6, "parent": 2, "name": "Sequence of sections/tasks/items", "level": 3, "hue": 212, "color": "#205592", "weight": 1.0, "children": [], "note": ""}, {"id": 7, "parent": 0, "name": "Type of interactiveness", "level": 2, "hue": 212, "color": "#174375", "weight": 1.0, "children": [], "note": ""}, {"id": 8, "parent": 0, "name": "Time allotment", "level": 2, "hue": 212, "color": "#174375", "weight": 4.0, "children": [9, 10, 11, 12], "note": ""}, {"id": 9, "parent": 8, "name": "Overall test duration", "level": 3, "hue": 212, "color": "#205592", "weight": 1.0, "children": [], "note": ""}, {"id": 10, "parent": 8, "name": "Time for each section/task", "level": 3, "hue": 212, "color": "#205592", "weight": 1.0, "children": [], "note": ""}, {"id": 11, "parent": 8, "name": "Preparation time", "level": 3, "hue": 212, "color": "#205592", "weight": 1.0, "children": [], "note": ""}, {"id": 12, "parent": 8, "name": "Response time", "level": 3, "hue": 212, "color": "#205592", "weight": 1.0, "children": [], "note": ""}, {"id": 13, "parent": 0, "name": "Input characteristic", "level": 2, "hue": 212, "color": "#174375", "weight": 14.0, "children": [14, 15], "note": ""}, {"id": 14, "parent": 13, "name": "Item/Task description", "level": 3, "hue": 212, "color": "#205592", "weight": 1.0, "children": [], "note": ""}, {"id": 15, "parent": 13, "name": "Input for interpretation", "level": 3, "hue": 212, "color": "#205592", "weight": 13.0, "children": [16, 22, 30], "note": ""}, {"id": 16, "parent": 15, "name": "Written text", "level": 4, "hue": 212, "color": "#2a67ad", "weight": 5.0, "children": [17, 18, 19, 20, 21], "note": ""}, {"id": 17, "parent": 16, "name": "Length", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": ""}, {"id": 18, "parent": 16, "name": "Topic", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": ""}, {"id": 19, "parent": 16, "name": "Genre/text type", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": ""}, {"id": 20, "parent": 16, "name": "Source/Authenticity", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": ""}, {"id": 21, "parent": 16, "name": "Text difficulty", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": ""}, {"id": 22, "parent": 15, "name": "Audio/video recording", "level": 4, "hue": 212, "color": "#2a67ad", "weight": 7.0, "children": [23, 24, 25, 26, 27, 28, 29], "note": ""}, {"id": 23, "parent": 22, "name": "Length", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": ""}, {"id": 24, "parent": 22, "name": "Topic", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": ""}, {"id": 25, "parent": 22, "name": "Genre/text type", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": ""}, {"id": 26, "parent": 22, "name": "Source/Authenticity", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": ""}, {"id": 27, "parent": 22, "name": "Text difficulty", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": ""}, {"id": 28, "parent": 22, "name": "Number of speakers", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": ""}, {"id": 29, "parent": 22, "name": "Intelligibility", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": ""}, {"id": 30, "parent": 15, "name": "Visual information", "level": 4, "hue": 212, "color": "#2a67ad", "weight": 1.0, "children": [], "note": ""}, {"id": 31, "parent": 0, "name": "Expected response", "level": 2, "hue": 212, "color": "#174375", "weight": 1.0, "children": [], "note": ""}, {"id": 32, "parent": null, "name": "Scoring", "level": 1, "hue": 253, "color": "#1e0f57", "weight": 12.0, "children": [33, 37, 43], "note": ""}, {"id": 33, "parent": 32, "name": "Methods", "level": 2, "hue": 253, "color": "#2e187c", "weight": 3.0, "children": [34, 35, 36], "note": ""}, {"id": 34, "parent": 33, "name": "Scoring procedure", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": ""}, {"id": 35, "parent": 33, "name": "Scoring criteria", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": ""}, {"id": 36, "parent": 33, "name": "Weighting", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": ""}, {"id": 37, "parent": 32, "name": "Meaning of scores", "level": 2, "hue": 253, "color": "#2e187c", "weight": 5.0, "children": [38, 39, 40, 41, 42], "note": ""}, {"id": 38, "parent": 37, "name": "Transformation between raw scores and band/scaled scores", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": ""}, {"id": 39, "parent": 37, "name": "Can-do descriptors", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": ""}, {"id": 40, "parent": 37, "name": "Score alignment with language framework (e.g., CEFR)", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": ""}, {"id": 41, "parent": 37, "name": "Score concordance with other tests", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": ""}, {"id": 42, "parent": 37, "name": "Score limitation", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": ""}, {"id": 43, "parent": 32, "name": "Assessment records", "level": 2, "hue": 253, "color": "#2e187c", "weight": 4.0, "children": [44, 45, 46, 47], "note": ""}, {"id": 44, "parent": 43, "name": "Content and display of score reports", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": ""}, {"id": 45, "parent": 43, "name": "Release date", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": ""}, {"id": 46, "parent": 43, "name": "Mode of delivery", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": ""}, {"id": 47, "parent": 43, "name": "Verification", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": ""}, {"id": 48, "parent": null, "name": "Policy", "level": 1, "hue": 281, "color": "#400f57", "weight": 12.0, "children": [49, 55, 56, 60, 61, 62], "note": ""}, {"id": 49, "parent": 48, "name": "Registration", "level": 2, "hue": 281, "color": "#5d187c", "weight": 5.0, "children": [50, 51, 52, 53, 54], "note": ""}, {"id": 50, "parent": 49, "name": "Fee and payment", "level": 3, "hue": 281, "color": "#7a24a2", "weight": 1.0, "children": [], "note": ""}, {"id": 51, "parent": 49, "name": "Age requirement", "level": 3, "hue": 281, "color": "#7a24a2", "weight": 1.0, "children": [], "note": ""}, {"id": 52, "parent": 49, "name": "Identification", "level": 3, "hue": 281, "color": "#7a24a2", "weight": 1.0, "children": [], "note": ""}, {"id": 53, "parent": 49, "name": "Test rescheduling and cancellation", "level": 3, "hue": 281, "color": "#7a24a2", "weight": 1.0, "children": [], "note": ""}, {"id": 54, "parent": 49, "name": "Refund", "level": 3, "hue": 281, "color": "#7a24a2", "weight": 1.0, "children": [], "note": ""}, {"id": 55, "parent": 48, "name": "Accommodation", "level": 2, "hue": 281, "color": "#5d187c", "weight": 1.0, "children": [], "note": ""}, {"id": 56, "parent": 48, "name": "Security (during test-taking)", "level": 2, "hue": 281, "color": "#5d187c", "weight": 3.0, "children": [57, 58, 59], "note": ""}, {"id": 57, "parent": 56, "name": "Malpractice and consequences", "level": 3, "hue": 281, "color": "#7a24a2", "weight": 1.0, "children": [], "note": ""}, {"id": 58, "parent": 56, "name": "Monitoring and detection", "level": 3, "hue": 281, "color": "#7a24a2", "weight": 1.0, "children": [], "note": ""}, {"id": 59, "parent": 56, "name": "Permitted and prohibited items/aids", "level": 3, "hue": 281, "color": "#7a24a2", "weight": 1.0, "children": [], "note": ""}, {"id": 60, "parent": 48, "name": "Confidentiality", "level": 2, "hue": 281, "color": "#5d187c", "weight": 1.0, "children": [], "note": ""}, {"id": 61, "parent": 48, "name": "Appeal", "level": 2, "hue": 281, "color": "#5d187c", "weight": 1.0, "children": [], "note": ""}, {"id": 62, "parent": 48, "name": "Retake", "level": 2, "hue": 281, "color": "#5d187c", "weight": 1.0, "children": [], "note": ""}, {"id": 63, "parent": null, "name": "Test quality", "level": 1, "hue": 320, "color": "#570f3f", "weight": 6.0, "children": [64, 65, 66, 67, 68, 69], "note": ""}, {"id": 64, "parent": 63, "name": "Test taker performance", "level": 2, "hue": 320, "color": "#761757", "weight": 1.0, "children": [], "note": ""}, {"id": 65, "parent": 63, "name": "Reliability statistics", "level": 2, "hue": 320, "color": "#761757", "weight": 1.0, "children": [], "note": ""}, {"id": 66, "parent": 63, "name": "Error estimate", "level": 2, "hue": 320, "color": "#761757", "weight": 1.0, "children": [], "note": ""}, {"id": 67, "parent": 63, "name": "Bias investigations", "level": 2, "hue": 320, "color": "#761757", "weight": 1.0, "children": [], "note": ""}, {"id": 68, "parent": 63, "name": "Washback", "level": 2, "hue": 320, "color": "#761757", "weight": 1.0, "children": [], "note": ""}, {"id": 69, "parent": 63, "name": "Alignment and score concordance", "level": 2, "hue": 320, "color": "#761757", "weight": 1.0, "children": [], "note": ""}, {"id": 70, "parent": null, "name": "Administration", "level": 1, "hue": 3, "color": "#57120f", "weight": 5.0, "children": [71, 72, 73, 74, 75], "note": ""}, {"id": 71, "parent": 70, "name": "Test venue", "level": 2, "hue": 3, "color": "#791c18", "weight": 1.0, "children": [], "note": ""}, {"id": 72, "parent": 70, "name": "Physical characteristics", "level": 2, "hue": 3, "color": "#791c18", "weight": 1.0, "children": [], "note": ""}, {"id": 73, "parent": 70, "name": "Technological requirements", "level": 2, "hue": 3, "color": "#791c18", "weight": 1.0, "children": [], "note": ""}, {"id": 74, "parent": 70, "name": "Instruction for interaction with equipment", "level": 2, "hue": 3, "color": "#791c18", "weight": 1.0, "children": [], "note": ""}, {"id": 75, "parent": 70, "name": "Test-day procedure", "level": 2, "hue": 3, "color": "#791c18", "weight": 1.0, "children": [], "note": ""}, {"id": 76, "parent": null, "name": "Test preparation", "level": 1, "hue": 24, "color": "#572c0f", "weight": 4.0, "children": [77, 78, 79, 80], "note": ""}, {"id": 77, "parent": 76, "name": "Sample test questions", "level": 2, "hue": 24, "color": "#6f3916", "weight": 1.0, "children": [], "note": ""}, {"id": 78, "parent": 76, "name": "Tips/strategies", "level": 2, "hue": 24, "color": "#6f3916", "weight": 1.0, "children": [], "note": ""}, {"id": 79, "parent": 76, "name": "Scored sample response (with commentary)", "level": 2, "hue": 24, "color": "#6f3916", "weight": 1.0, "children": [], "note": ""}, {"id": 80, "parent": 76, "name": "Other official preparation resources", "level": 2, "hue": 24, "color": "#6f3916", "weight": 1.0, "children": [], "note": ""}, {"id": 81, "parent": null, "name": "Test purpose and intended use", "level": 1, "hue": 44, "color": "#57440f", "weight": 4.0, "children": [82, 83, 84, 85], "note": ""}, {"id": 82, "parent": 81, "name": "Purpose", "level": 2, "hue": 44, "color": "#655014", "weight": 1.0, "children": [], "note": ""}, {"id": 83, "parent": 81, "name": "Use", "level": 2, "hue": 44, "color": "#655014", "weight": 1.0, "children": [], "note": ""}, {"id": 84, "parent": 81, "name": "Test taker population", "level": 2, "hue": 44, "color": "#655014", "weight": 1.0, "children": [], "note": ""}, {"id": 85, "parent": 81, "name": "Score user", "level": 2, "hue": 44, "color": "#655014", "weight": 1.0, "children": [], "note": ""}, {"id": 86, "parent": null, "name": "Construct", "level": 1, "hue": 81, "color": "#3e570f", "weight": 1.0, "children": [], "note": ""}, {"id": 87, "parent": null, "name": "Test development", "level": 1, "hue": 125, "color": "#0f5715", "weight": 1.0, "children": [], "note": ""}, {"id": 88, "parent": null, "name": "Updates", "level": 1, "hue": 168, "color": "#0f5748", "weight": 1.0, "children": [], "note": ""}];
-const svg=document.getElementById('diagram');
-const sectors=document.getElementById('sectors');
-const rotator=document.getElementById('rotator');
-const stage=document.getElementById('stage');
-const arcDefs=document.getElementById('arc-defs');
-const center=document.getElementById('centre');
-const NS='http://www.w3.org/2000/svg';
-const SIZE=6620,C=SIZE/2,CENTER=420,WIDTH=560,FONT=64;
-let rotation=0, focused=null, active=null, pointer=null, labelsAnimating=false;
-const ROTATION_SENSITIVITY=0.27; // 27% of pointer angular movement
-let view={x:0,y:0,w:SIZE,h:SIZE};
-const elements=new Map(), byId=new Map(NODES.map(n=>[n.id,n]));
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <script>
+    // Phones and tablets get the same interactive diagram without publication/export controls.
+    // Modern iPadOS can identify itself as a Macintosh, so account for touch-capable iPads.
+    (function () {
+      const ua = navigator.userAgent || '';
+      const mobileOrTablet = /Android|iPhone|iPad|iPod|Mobile|Tablet|Silk|Kindle|PlayBook/i.test(ua);
+      const desktopModeIPad = /Macintosh/i.test(ua) && navigator.maxTouchPoints > 1;
+      const likelyTablet = window.matchMedia('(pointer:coarse)').matches && navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) <= 1100;
+      if (mobileOrTablet || desktopModeIPad || likelyTablet) document.documentElement.classList.add('tif-handheld');
+    })();
+  </script>
+  <title>Test Information Framework (TIF)</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      user-select: none !important;
+      -webkit-user-select: none !important;
+      -moz-user-select: none !important;
+      -webkit-touch-callout: none
+    }
 
-const notePopup=document.getElementById('tif-note-popup');
-const noteTitle=document.getElementById('tif-note-title');
-const noteBody=document.getElementById('tif-note-body');
-let hoveredNoteId=null;
-function hideNote(){hoveredNoteId=null;notePopup.hidden=true;}
-function positionNote(e){
-  if(notePopup.hidden)return;
-  const gap=16,pad=10;
-  const w=notePopup.offsetWidth,h=notePopup.offsetHeight;
-  let x=e.clientX+gap,y=e.clientY+gap;
-  if(x+w+pad>window.innerWidth)x=e.clientX-w-gap;
-  if(y+h+pad>window.innerHeight)y=e.clientY-h-gap;
-  notePopup.style.left=Math.max(pad,Math.min(x,window.innerWidth-w-pad))+'px';
-  notePopup.style.top=Math.max(pad,Math.min(y,window.innerHeight-h-pad))+'px';
-}
-function showSectorNote(node,e){
-  if(pointer||labelsAnimating){hideNote();return;}
-  if(hoveredNoteId!==node.id){
-    hoveredNoteId=node.id;
-    notePopup.style.setProperty('--note-accent', node.color || '#6c8fb0');
-    noteTitle.textContent=node.name;
-    noteBody.textContent=typeof node.note==='string'?node.note:'';
-    notePopup.hidden=false;
-  }
-  positionNote(e);
-}
-// Delegated handlers survive every regeneration of diagram nodes.
-stage.addEventListener('pointermove',e=>{
-  if(e.pointerType==='touch'||pointer){return;}
-  const g=e.target.closest('.node');
-  if(!g||!stage.contains(g)){hideNote();return;}
-  const id=Number(g.dataset.nodeId),node=byId.get(id);
-  if(node)showSectorNote(node,e);else hideNote();
-});
-stage.addEventListener('pointerleave',hideNote);
-stage.addEventListener('pointerdown',hideNote);
-stage.addEventListener('wheel',hideNote,{passive:true});
-window.addEventListener('blur',hideNote);
-function polar(r,a){const t=a*Math.PI/180;return [C+r*Math.cos(t),C+r*Math.sin(t)];}
-function sector(inner,outer,a,b){
-  if(b-a<0.002 || outer<=inner) return '';
-  // Split spans over 180 degrees so full-circle expansions remain valid SVG.
-  const points=Math.max(1,Math.ceil((b-a)/170));
-  let d='';
-  let p=polar(outer,a);d+=`M${p[0]},${p[1]}`;
-  for(let i=1;i<=points;i++){
-    const q=polar(outer,a+(b-a)*i/points);
-    d+=` A${outer},${outer} 0 0,1 ${q[0]},${q[1]}`;
-  }
-  let q=polar(inner,b);d+=` L${q[0]},${q[1]}`;
-  for(let i=points-1;i>=0;i--){
-    q=polar(inner,a+(b-a)*i/points);
-    d+=` A${inner},${inner} 0 0,0 ${q[0]},${q[1]}`;
-  }
-  return d+' Z';
-}
-function fullRing(inner,outer){
-  // Draw a complete annulus with no radial start/end seam.
-  // Even-odd means the inner disk is cut out of the outer disk.
-  const a=polar(outer,0), b=polar(outer,180);
-  const c=polar(inner,0), d=polar(inner,180);
-  return `M${a[0]},${a[1]} A${outer},${outer} 0 1,1 ${b[0]},${b[1]} A${outer},${outer} 0 1,1 ${a[0]},${a[1]} Z `+
-         `M${c[0]},${c[1]} A${inner},${inner} 0 1,0 ${d[0]},${d[1]} A${inner},${inner} 0 1,0 ${c[0]},${c[1]} Z`;
-}
-function makeEl(name){return document.createElementNS(NS,name);}
-function isDescendant(id,ancestor){
-  if(ancestor===null)return true;
-  let k=id;
-  while(k!==null){if(k===ancestor)return true;k=byId.get(k).parent;}
-  return false;
-}
-// Expanded-sector labels follow true concentric SVG arcs; each expanded view
-// uses one shared font size. The focused root label remains fixed at the top.
-// The overview keeps its previous orientation and styling.
-const FONT_EXPANDED=100, LABEL_MARGIN=20;
-let sharedExpandedFont=FONT_EXPANDED;
-let sharedOverviewFont=FONT; // One identical font size for every overview sector.
-const canvas=document.createElement('canvas');
-const ctx=canvas.getContext('2d');
-function measureLine(line,size){
-  ctx.font=`500 ${size}px Arial, Helvetica, sans-serif`;
-  return ctx.measureText(line).width;
-}
-function makeLines(name,size,width){
-  const words=name.split(/\s+/), lines=[];let current='';
-  for(const word of words){
-    const candidate=current?current+' '+word:word;
-    if(current && measureLine(candidate,size)>width){lines.push(current);current=word;}
-    else current=candidate;
-  }
-  if(current)lines.push(current);
-  return lines;
-}
-function makeArc(r,a,b,reverse=false){
-  // The exact circular centreline, used as the text baseline.
-  // Short sectors become open arcs; full circles use an almost-full arc.
-  let from=reverse?b:a, to=reverse?a:b;
-  if(Math.abs(to-from)>=359.999){
-    from=-90;to=269.99;
-  }
-  const [x1,y1]=polar(r,from),[x2,y2]=polar(r,to);
-  const span=Math.abs(to-from),large=span>180?1:0,sweep=reverse?0:1;
-  return `M${x1},${y1} A${r},${r} 0 ${large},${sweep} ${x2},${y2}`;
-}
-function isBottom(angle){
-  const a=((angle+rotation)%360+360)%360;
-  return a>0&&a<180;
-}
-// Each label is measured in BOTH directions. A tangential label must fit
-// around the arc as well as between the inner and outer ring edges; a radial
-// label must fit in the band and within the wedge's smallest angular width.
-// This is a geometric fit, not a character-count threshold.
-function balancedLines(name,size,maxLineWidth){
-  const words=name.split(/\s+/);
-  const result=[];
-  let line='';
-  for(const w of words){
-    const tryLine=line?line+' '+w:w;
-    if(line && measureLine(tryLine,size)>maxLineWidth){result.push(line);line=w;}
-    else line=tryLine;
-  }
-  if(line)result.push(line);
-  return result;
-}
-function fitOption(name,size,inner,outer,span,isTangential){
-  if(span<0.1)return null;
-  const theta=span*Math.PI/180;
-  const band=outer-inner;
-  const padding=Math.max(12,size*.24);
-  if(!isTangential){
-    const maxW=band-2*padding;
-    const lines=balancedLines(name,size,maxW);
-    const thickness=(lines.length-1)*size*1.24+size*1.16;
-    const angularSpace=2*(inner+band/2)*Math.sin(Math.min(Math.PI,theta)/2);
-    if(thickness>angularSpace-2*padding)return null;
-    if(lines.some(t=>measureLine(t,size)>maxW))return null;
-    return {lines,size,radial:true};
-  }
-  // Each line occupies a separate, centred circular baseline. A fixed-font,
-  // word-preserving layout is found by exploring valid line breaks instead of
-  // using a greedy wrap that may paradoxically fail for a wider wedge.
-  const words=name.trim().split(/\s+/);
-  const lineStep=size*1.24;
-  const maxLines=Math.min(words.length,Math.ceil((band-2*padding-size*1.36)/lineStep)+1);
-  for(let count=1;count<=maxLines;count++){
-    const half=(count-1)*lineStep/2;
-    const radii=Array.from({length:count},(_,i)=>inner+band/2-half+i*lineStep);
-    if(radii[0]-size*.68<=inner+padding)continue;
-    if(radii[count-1]+size*.68>=outer-padding)continue;
-    const limits=radii.map(r=>Math.max(0,(r-size*.6)*theta-2*(padding+size*.08)));
-    const memo=new Map();
-    function solve(index,lineNo){
-      if(lineNo===count)return index===words.length ? [] : null;
-      if(index>=words.length)return null;
-      const key=index+':'+lineNo;
-      if(memo.has(key))return memo.get(key);
-      const maxEnd=words.length-(count-lineNo-1);
-      // Prefer balanced word groups but retain natural word order.
-      let best=null,bestScore=Infinity;
-      for(let end=index+1;end<=maxEnd;end++){
-        const text=words.slice(index,end).join(' ');
-        const measured=measureLine(text,size)*1.04;
-        if(measured>limits[lineNo])break;
-        const rest=solve(end,lineNo+1);
-        if(rest!==null){
-          const score=Math.pow(1-measured/Math.max(limits[lineNo],1),2)+(rest.score||0);
-          if(score<bestScore){best=[text,...rest];best.score=score;bestScore=score;}
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      font-family: Arial, Helvetica, sans-serif;
+      background: #fff
+    }
+
+    #stage {
+      height: 100vh;
+      width: 100vw;
+      overflow: hidden;
+      cursor: grab;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none
+    }
+
+    #stage.dragging {
+      cursor: grabbing
+    }
+
+    #diagram {
+      display: block;
+      width: 100%;
+      height: 100%
+    }
+
+    .node {
+      cursor: pointer
+    }
+
+    .node path {
+      transition: stroke-width .14s ease
+    }
+
+    .node:hover path {
+      stroke-width: 5
+    }
+
+    .node text,
+    #centre text {
+      pointer-events: none;
+      user-select: none;
+      -webkit-user-select: none
+    }
+
+    .node text {
+      transition: font-size .38s ease
+    }
+
+    #centre {
+      cursor: pointer
+    }
+
+    #export-control {
+      position: fixed;
+      right: 18px;
+      top: 18px;
+      z-index: 30;
+      font-family: Arial, Helvetica, sans-serif
+    }
+
+    html.tif-handheld #export-control {
+      display: none !important
+    }
+
+    #export-button {
+      width: 43px;
+      height: 43px;
+      display: grid;
+      place-items: center;
+      background: #fff;
+      color: #172b42;
+      border: 1px solid #d8dde5;
+      border-radius: 12px;
+      box-shadow: 0 2px 9px #14253b1e;
+      cursor: pointer
+    }
+
+    #export-button:hover,
+    #export-button:focus-visible {
+      background: #f2f5f9;
+      outline: 2px solid transparent
+    }
+
+    #export-button svg {
+      width: 21px;
+      height: 21px
+    }
+
+    #export-menu {
+      position: absolute;
+      right: 0;
+      top: 50px;
+      width: 150px;
+      padding: 5px;
+      background: white;
+      border: 1px solid #d8dde5;
+      border-radius: 12px;
+      box-shadow: 0 6px 22px #14253b26
+    }
+
+    #export-menu[hidden] {
+      display: none
+    }
+
+    #export-menu button {
+      display: block;
+      width: 100%;
+      border: 0;
+      border-radius: 7px;
+      background: transparent;
+      color: #182b3e;
+      text-align: left;
+      padding: 11px 12px;
+      font: 14px Arial, Helvetica, sans-serif;
+      cursor: pointer
+    }
+
+    #export-menu button:hover,
+    #export-menu button:focus-visible {
+      background: #eef3f9
+    }
+
+    @media print {
+      #export-control {
+        display: none !important
+      }
+
+      #stage {
+        height: 100vh !important
+      }
+    }
+
+    /* Hover note belongs to the sector, not its screen location. */
+    #tif-note-popup[hidden] {
+      display: none !important
+    }
+
+    #tif-note-popup {
+      --note-accent: #6c8fb0;
+      position: fixed;
+      left: 0;
+      top: 0;
+      z-index: 25;
+      width: max-content;
+      min-width: min(280px, calc(100vw - 24px));
+      max-width: min(420px, calc(100vw - 24px));
+      max-height: min(55vh, 420px);
+      overflow: auto;
+      padding: 12px 14px;
+      background: #fff;
+      color: #192a40;
+      border: 1px solid #d7dfe9;
+      border-radius: 4px;
+      box-shadow: 0 8px 24px #0b253b22;
+      pointer-events: none;
+      white-space: normal;
+      line-height: 1.4;
+      font: 14px Arial, Helvetica, sans-serif;
+      text-align: left
+    }
+
+    #tif-note-title {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      min-height: 26px;
+      padding: 3px 0;
+      font-weight: 700;
+      overflow-wrap: break-word;
+      word-break: normal;
+      color: var(--note-accent)
+    }
+
+    #tif-note-title::before {
+      content: "";
+      display: block;
+      flex: 0 0 7px;
+      align-self: stretch;
+      background: var(--note-accent);
+      border-radius: 4px;
+      pointer-events: none
+    }
+
+    #tif-note-body {
+      margin: 7px 0 0 27px;
+      white-space: pre-wrap;
+      overflow-wrap: break-word;
+      word-break: normal;
+      border-top: 1px solid #e7edf4;
+      padding-top: 7px
+    }
+
+    #tif-note-body:empty {
+      display: none
+    }
+
+    @media print {
+      #tif-note-popup {
+        display: none !important
+      }
+    }
+
+    /* Touch-only adaptations; mouse and trackpad rules above are retained. */
+    #touch-note-close {
+      display: none
+    }
+
+    @media (pointer:coarse) {
+      #stage {
+        height: 100dvh;
+        min-height: 0;
+        touch-action: none
+      }
+
+      #export-control {
+        right: max(12px, env(safe-area-inset-right));
+        top: max(12px, env(safe-area-inset-top))
+      }
+
+      #export-button {
+        width: 50px;
+        height: 50px
+      }
+
+      #export-menu {
+        top: 56px;
+        width: 190px;
+        max-width: calc(100vw - 24px)
+      }
+
+      #export-menu button {
+        font-size: 16px;
+        padding: 14px 15px;
+        min-height: 48px
+      }
+
+      #tif-note-popup {
+        max-width: calc(100vw - 24px);
+        max-height: min(60dvh, 480px);
+        font-size: 15px;
+        pointer-events: auto;
+        touch-action: pan-y;
+        overflow: auto;
+        padding-right: 36px
+      }
+
+      #tif-note-title {
+        padding-right: 6px
+      }
+
+      #touch-note-close {
+        display: grid;
+        place-items: center;
+        position: absolute;
+        right: 6px;
+        top: 6px;
+        width: 30px;
+        height: 30px;
+        border: 0;
+        background: transparent;
+        color: #43566e;
+        font-size: 22px;
+        line-height: 1;
+        cursor: pointer
+      }
+    }
+
+    @media (max-width:420px) {
+      #tif-note-popup {
+        min-width: min(280px, calc(100vw - 24px));
+        max-width: calc(100vw - 24px)
+      }
+    }
+
+    /* On handheld devices, pin the drawing surface to the actual visual viewport.
+   This avoids mobile Safari's historical oversized 100vh scroll area. */
+    html.tif-handheld,
+    html.tif-handheld body {
+      height: 100%;
+      overflow: hidden
+    }
+
+    html.tif-handheld #stage {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100dvh;
+      min-height: 0
+    }
+
+    /* Compact, accessible navigation guide. Kept separate from the SVG and exports. */
+    #tif-guide-control {
+      position: fixed;
+      top: 18px;
+      left: 18px;
+      z-index: 40;
+      font-family: Arial, Helvetica, sans-serif
+    }
+
+    #tif-guide-button {
+      width: 43px;
+      height: 43px;
+      display: grid;
+      place-items: center;
+      background: #fff;
+      color: #172b42;
+      border: 1px solid #d8dde5;
+      border-radius: 4px;
+      box-shadow: 0 2px 9px #14253b1e;
+      cursor: pointer
+    }
+
+    #tif-guide-button:hover,
+    #tif-guide-button:focus-visible {
+      background: #f2f5f9
+    }
+
+    #tif-guide-button svg {
+      width: 21px;
+      height: 21px
+    }
+
+    #tif-guide-panel {
+      position: absolute;
+      top: 52px;
+      left: 0;
+      width: min(360px, calc(100vw - 24px));
+      max-height: calc(100dvh - 85px);
+      overflow: auto;
+      padding: 16px 17px;
+      background: #fff;
+      color: #182b3e;
+      border: 1px solid #d8dde5;
+      border-radius: 4px;
+      box-shadow: 0 8px 26px #14253b29;
+      font: 14px/1.45 Arial, Helvetica, sans-serif;
+      text-align: left
+    }
+
+    #tif-guide-panel[hidden] {
+      display: none !important
+    }
+
+    #tif-guide-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+      font-size: 16px;
+      font-weight: 700
+    }
+
+    #tif-guide-close {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      flex: 0 0 28px;
+      border: 0;
+      border-radius: 4px;
+      background: transparent;
+      color: #45566b;
+      font: 23px Arial, sans-serif;
+      cursor: pointer
+    }
+
+    #tif-guide-close:hover {
+      background: #f0f3f7
+    }
+
+    .tif-guide-list {
+      margin: 0;
+      padding-left: 22px
+    }
+
+    .tif-guide-list li {
+      padding-left: 3px;
+      margin: 0 0 7px
+    }
+
+    .tif-guide-list li:last-child {
+      margin-bottom: 0
+    }
+
+    #tif-guide-touch {
+      display: none
+    }
+
+    html.tif-handheld #tif-guide-desktop {
+      display: none
+    }
+
+    html.tif-handheld #tif-guide-touch {
+      display: block
+    }
+
+    html.tif-handheld #tif-guide-control {
+      top: max(12px, env(safe-area-inset-top));
+      left: max(12px, env(safe-area-inset-left))
+    }
+
+    html.tif-handheld #tif-guide-button {
+      width: 48px;
+      height: 48px
+    }
+
+    html.tif-handheld #tif-guide-panel {
+      top: 56px;
+      width: min(345px, calc(100vw - 24px));
+      max-height: calc(100dvh - 88px);
+      font-size: 14px
+    }
+
+    @media print {
+      #tif-guide-control {
+        display: none !important
+      }
+    }
+
+    /* Public feedback panel: separate from the sunburst and its export snapshot. */
+    #tif-feedback-control {
+      position: fixed;
+      top: 18px;
+      left: 70px;
+      z-index: 41;
+      font-family: Arial, Helvetica, sans-serif
+    }
+
+    #tif-feedback-button {
+      width: 43px;
+      height: 43px;
+      display: grid;
+      place-items: center;
+      background: #fff;
+      color: #172b42;
+      border: 1px solid #d8dde5;
+      border-radius: 4px;
+      box-shadow: 0 2px 9px #14253b1e;
+      cursor: pointer
+    }
+
+    #tif-feedback-button:hover,
+    #tif-feedback-button:focus-visible {
+      background: #f2f5f9
+    }
+
+    #tif-feedback-button svg {
+      width: 21px;
+      height: 21px
+    }
+
+    #tif-feedback-panel {
+      position: fixed;
+      top: 70px;
+      left: 18px;
+      width: min(390px, calc(100vw - 24px));
+      max-height: calc(100dvh - 85px);
+      overflow-y: auto;
+      padding: 16px 17px;
+      background: white;
+      color: #182b3e;
+      border: 1px solid #d8dde5;
+      border-radius: 4px;
+      box-shadow: 0 8px 26px #14253b29;
+      font: 14px/1.45 Arial, Helvetica, sans-serif;
+      text-align: left
+    }
+
+    #tif-feedback-panel[hidden] {
+      display: none !important
+    }
+
+    #tif-feedback-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 16px;
+      font-weight: 700
+    }
+
+    #tif-feedback-close {
+      display: grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      flex: 0 0 28px;
+      border: 0;
+      border-radius: 4px;
+      background: transparent;
+      color: #45566b;
+      font: 23px Arial, sans-serif;
+      cursor: pointer
+    }
+
+    #tif-feedback-close:hover {
+      background: #f0f3f7
+    }
+
+    #tif-feedback-intro {
+      margin: 14px 0 12px
+    }
+
+    #tif-feedback-anon {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 13px;
+      font-weight: 600;
+      font-size: 13px;
+      color: #344c64
+    }
+
+    #tif-feedback-anon svg {
+      width: 17px;
+      height: 17px;
+      flex: none
+    }
+
+    #tif-feedback-text {
+      display: block;
+      resize: vertical;
+      width: 100%;
+      min-height: 112px;
+      max-height: 36dvh;
+      padding: 10px 11px;
+      line-height: 1.45;
+      background: #fff;
+      color: #182b3e;
+      border: 1px solid #becbd9;
+      border-radius: 4px;
+      font: 14px/1.45 Arial, Helvetica, sans-serif;
+      user-select: text !important;
+      -webkit-user-select: text !important
+    }
+
+    #tif-feedback-text:focus {
+      outline: 2px solid #27619f;
+      outline-offset: 1px
+    }
+
+    #tif-feedback-text::placeholder {
+      color: #75869a
+    }
+
+    #tif-feedback-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      margin-top: 12px
+    }
+
+    #tif-feedback-submit {
+      background: #234f7e;
+      border: 1px solid #234f7e;
+      color: #fff;
+      border-radius: 4px;
+      padding: 9px 18px;
+      min-height: 38px;
+      font: 600 14px Arial, Helvetica, sans-serif;
+      cursor: pointer
+    }
+
+    #tif-feedback-submit:hover:not(:disabled) {
+      background: #173e66
+    }
+
+    #tif-feedback-submit:disabled {
+      opacity: .55;
+      cursor: not-allowed
+    }
+
+    #tif-feedback-status {
+      margin-top: 10px;
+      font-size: 13px;
+      line-height: 1.4;
+      overflow-wrap: break-word
+    }
+
+    #tif-feedback-status:empty {
+      display: none
+    }
+
+    #tif-feedback-status[data-kind="error"] {
+      color: #9c2931
+    }
+
+    #tif-feedback-status[data-kind="success"] {
+      color: #255f42
+    }
+
+    #tif-feedback-trap {
+      position: absolute;
+      left: -10000px;
+      top: auto;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      pointer-events: none
+    }
+
+    html.tif-handheld #tif-feedback-control {
+      top: max(12px, env(safe-area-inset-top));
+      left: calc(max(12px, env(safe-area-inset-left)) + 58px)
+    }
+
+    html.tif-handheld #tif-feedback-button {
+      width: 48px;
+      height: 48px
+    }
+
+    html.tif-handheld #tif-feedback-panel {
+      top: calc(max(12px, env(safe-area-inset-top)) + 56px);
+      left: max(12px, env(safe-area-inset-left));
+      width: min(390px, calc(100vw - 24px));
+      max-height: calc(100dvh - 90px)
+    }
+
+    html.tif-handheld #tif-feedback-text {
+      font-size: 16px
+    }
+
+    html.tif-handheld #tif-feedback-submit {
+      font-size: 16px;
+      min-height: 44px
+    }
+
+    @media print {
+      #tif-feedback-control {
+        display: none !important
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="tif-guide-control">
+    <button id="tif-guide-button" type="button" aria-label="Navigation Guide" aria-controls="tif-guide-panel"
+      aria-expanded="true" title="Navigation Guide">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+        stroke-linejoin="round" aria-hidden="true">
+        <circle cx="12" cy="12" r="9" />
+        <path d="M9.7 9a2.35 2.35 0 0 1 4.6.65c0 1.8-2.3 2.1-2.3 4" />
+        <path d="M12 17.5h.01" />
+      </svg>
+    </button>
+    <section id="tif-guide-panel" role="region" aria-label="Navigation Guide">
+      <div id="tif-guide-heading"><span>Navigation Guide</span><button id="tif-guide-close" type="button"
+          aria-label="Close Navigation Guide">×</button></div>
+      <ol id="tif-guide-desktop" class="tif-guide-list">
+        <li><strong>“Click”</strong> a coloured area to view its subcategories.</li>
+        <li><strong>“Click”</strong> the white circle at the centre ("Test Information Framework (TIF)") to return to
+          the full diagram.</li>
+        <li><strong>“Drag”</strong> a coloured area to rotate the diagram.</li>
+        <li><strong>“Drag”</strong> the white background to move the diagram.</li>
+        <li><strong>“Scroll”</strong> to zoom in or out.</li>
+        <li><strong>“Hover”</strong> over a coloured area to view its notes.</li>
+      </ol>
+      <ol id="tif-guide-touch" class="tif-guide-list">
+        <li><strong>“Tap”</strong> a coloured area to view its subcategories.</li>
+        <li><strong>“Tap”</strong> the white circle at the centre ("Test Information Framework (TIF)") to return to the
+          full diagram.</li>
+        <li><strong>“Drag”</strong> a coloured area to rotate the diagram.</li>
+        <li><strong>“Drag”</strong> the white background to move the diagram.</li>
+        <li><strong>“Pinch”</strong> with two fingers to zoom in or out.</li>
+        <li><strong>“Press and hold”</strong> a coloured area to view its notes.</li>
+      </ol>
+    </section>
+  </div>
+
+  <div id="tif-feedback-control">
+    <button id="tif-feedback-button" type="button" aria-label="Feedback" aria-controls="tif-feedback-panel"
+      aria-expanded="false" title="Feedback">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+        stroke-linejoin="round" aria-hidden="true">
+        <path
+          d="M20 11.5c0 4.5-3.6 8-8.3 8a9.8 9.8 0 0 1-3.6-.7L4 20l1.2-3.7A8.1 8.1 0 0 1 3.5 11.5c0-4.5 3.6-8 8.3-8s8.2 3.5 8.2 8Z" />
+        <path d="M8 10.5h8M8 14h5" />
+      </svg>
+    </button>
+    <section id="tif-feedback-panel" hidden role="region" aria-label="Feedback">
+      <div id="tif-feedback-heading"><span>Feedback</span><button id="tif-feedback-close" type="button"
+          aria-label="Close Feedback">×</button></div>
+      <p id="tif-feedback-intro">We welcome your feedback on the framework.</p>
+      <div id="tif-feedback-anon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+          stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5l-8-3Z" />
+          <path d="m8.4 12 2.4 2.4 4.8-5" />
+        </svg><span>Your comment is anonymous.</span></div>
+      <form id="tif-feedback-form" autocomplete="off">
+        <textarea id="tif-feedback-text" name="comment" maxlength="3000" rows="5"
+          placeholder="Write your comment here..." aria-label="Your feedback" required></textarea>
+        <input id="tif-feedback-trap" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" />
+        <div id="tif-feedback-actions"><button id="tif-feedback-submit" type="submit" disabled>Submit</button></div>
+        <div id="tif-feedback-status" role="status" aria-live="polite"></div>
+      </form>
+    </section>
+  </div>
+  <div id="export-control">
+    <button id="export-button" type="button" title="Export diagram" aria-label="Export diagram" aria-haspopup="true"
+      aria-expanded="false">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"
+        stroke-linejoin="round" aria-hidden="true">
+        <path d="M12 3v12m-4-4 4 4 4-4" />
+        <path d="M4 16v4h16v-4" />
+      </svg>
+    </button>
+    <div id="export-menu" hidden>
+      <button type="button" data-export="png">Picture (PNG)</button>
+      <button type="button" data-export="svg">Vector (SVG)</button>
+      <button type="button" data-export="pdf">PDF</button>
+    </div>
+  </div>
+  <div id="tif-note-popup" hidden role="tooltip"><button id="touch-note-close" type="button"
+      aria-label="Close note">×</button>
+    <div id="tif-note-title"></div>
+    <div id="tif-note-body"></div>
+  </div>
+  <div id="stage"><svg id="diagram" xmlns="http://www.w3.org/2000/svg" width="6620" height="6620"
+      viewBox="0 0 6620 6620">
+      <rect x="0" y="0" width="6620" height="6620" fill="white" />
+      <defs id="arc-defs"></defs>
+      <g id="rotator">
+        <g id="sectors"></g>
+      </g>
+      <g id="centre">
+        <circle cx="3310.0" cy="3310.0" r="420" fill="white" stroke="white" stroke-width="3" />
+        <text x="3310.0" y="3285.0" text-anchor="middle" font-size="56" font-weight="700" fill="#111">Test Information
+          Framework</text>
+        <text x="3310.0" y="3352.0" text-anchor="middle" font-size="56" font-weight="700" fill="#111">(TIF)</text>
+      </g>
+    </svg></div>
+  <script>
+    'use strict';
+    const NODES = [{ "id": 0, "parent": null, "name": "Test content", "level": 1, "hue": 212, "color": "#0f3057", "weight": 25.0, "children": [1, 2, 7, 8, 13, 31], "note": "" }, { "id": 1, "parent": 0, "name": "Mode of delivery", "level": 2, "hue": 212, "color": "#174375", "weight": 1.0, "children": [], "note": "" }, { "id": 2, "parent": 0, "name": "Test structure", "level": 2, "hue": 212, "color": "#174375", "weight": 4.0, "children": [3, 4, 5, 6], "note": "" }, { "id": 3, "parent": 2, "name": "Number of sections", "level": 3, "hue": 212, "color": "#205592", "weight": 1.0, "children": [], "note": "" }, { "id": 4, "parent": 2, "name": "Task/Item type in each section", "level": 3, "hue": 212, "color": "#205592", "weight": 1.0, "children": [], "note": "" }, { "id": 5, "parent": 2, "name": "Number of tasks/items per section", "level": 3, "hue": 212, "color": "#205592", "weight": 1.0, "children": [], "note": "" }, { "id": 6, "parent": 2, "name": "Sequence of sections/tasks/items", "level": 3, "hue": 212, "color": "#205592", "weight": 1.0, "children": [], "note": "" }, { "id": 7, "parent": 0, "name": "Type of interactiveness", "level": 2, "hue": 212, "color": "#174375", "weight": 1.0, "children": [], "note": "" }, { "id": 8, "parent": 0, "name": "Time allotment", "level": 2, "hue": 212, "color": "#174375", "weight": 4.0, "children": [9, 10, 11, 12], "note": "" }, { "id": 9, "parent": 8, "name": "Overall test duration", "level": 3, "hue": 212, "color": "#205592", "weight": 1.0, "children": [], "note": "" }, { "id": 10, "parent": 8, "name": "Time for each section/task", "level": 3, "hue": 212, "color": "#205592", "weight": 1.0, "children": [], "note": "" }, { "id": 11, "parent": 8, "name": "Preparation time", "level": 3, "hue": 212, "color": "#205592", "weight": 1.0, "children": [], "note": "" }, { "id": 12, "parent": 8, "name": "Response time", "level": 3, "hue": 212, "color": "#205592", "weight": 1.0, "children": [], "note": "" }, { "id": 13, "parent": 0, "name": "Input characteristic", "level": 2, "hue": 212, "color": "#174375", "weight": 14.0, "children": [14, 15], "note": "" }, { "id": 14, "parent": 13, "name": "Item/Task description", "level": 3, "hue": 212, "color": "#205592", "weight": 1.0, "children": [], "note": "" }, { "id": 15, "parent": 13, "name": "Input for interpretation", "level": 3, "hue": 212, "color": "#205592", "weight": 13.0, "children": [16, 22, 30], "note": "" }, { "id": 16, "parent": 15, "name": "Written text", "level": 4, "hue": 212, "color": "#2a67ad", "weight": 5.0, "children": [17, 18, 19, 20, 21], "note": "" }, { "id": 17, "parent": 16, "name": "Length", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": "" }, { "id": 18, "parent": 16, "name": "Topic", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": "" }, { "id": 19, "parent": 16, "name": "Genre/text type", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": "" }, { "id": 20, "parent": 16, "name": "Source/Authenticity", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": "" }, { "id": 21, "parent": 16, "name": "Text difficulty", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": "" }, { "id": 22, "parent": 15, "name": "Audio/video recording", "level": 4, "hue": 212, "color": "#2a67ad", "weight": 7.0, "children": [23, 24, 25, 26, 27, 28, 29], "note": "" }, { "id": 23, "parent": 22, "name": "Length", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": "" }, { "id": 24, "parent": 22, "name": "Topic", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": "" }, { "id": 25, "parent": 22, "name": "Genre/text type", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": "" }, { "id": 26, "parent": 22, "name": "Source/Authenticity", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": "" }, { "id": 27, "parent": 22, "name": "Text difficulty", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": "" }, { "id": 28, "parent": 22, "name": "Number of speakers", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": "" }, { "id": 29, "parent": 22, "name": "Intelligibility", "level": 5, "hue": 212, "color": "#3578c5", "weight": 1.0, "children": [], "note": "" }, { "id": 30, "parent": 15, "name": "Visual information", "level": 4, "hue": 212, "color": "#2a67ad", "weight": 1.0, "children": [], "note": "" }, { "id": 31, "parent": 0, "name": "Expected response", "level": 2, "hue": 212, "color": "#174375", "weight": 1.0, "children": [], "note": "" }, { "id": 32, "parent": null, "name": "Scoring", "level": 1, "hue": 253, "color": "#1e0f57", "weight": 12.0, "children": [33, 37, 43], "note": "" }, { "id": 33, "parent": 32, "name": "Methods", "level": 2, "hue": 253, "color": "#2e187c", "weight": 3.0, "children": [34, 35, 36], "note": "" }, { "id": 34, "parent": 33, "name": "Scoring procedure", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": "" }, { "id": 35, "parent": 33, "name": "Scoring criteria", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": "" }, { "id": 36, "parent": 33, "name": "Weighting", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": "" }, { "id": 37, "parent": 32, "name": "Meaning of scores", "level": 2, "hue": 253, "color": "#2e187c", "weight": 5.0, "children": [38, 39, 40, 41, 42], "note": "" }, { "id": 38, "parent": 37, "name": "Transformation between raw scores and band/scaled scores", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": "" }, { "id": 39, "parent": 37, "name": "Can-do descriptors", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": "" }, { "id": 40, "parent": 37, "name": "Score alignment with language framework (e.g., CEFR)", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": "" }, { "id": 41, "parent": 37, "name": "Score concordance with other tests", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": "" }, { "id": 42, "parent": 37, "name": "Score limitation", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": "" }, { "id": 43, "parent": 32, "name": "Assessment records", "level": 2, "hue": 253, "color": "#2e187c", "weight": 4.0, "children": [44, 45, 46, 47], "note": "" }, { "id": 44, "parent": 43, "name": "Content and display of score reports", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": "" }, { "id": 45, "parent": 43, "name": "Release date", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": "" }, { "id": 46, "parent": 43, "name": "Mode of delivery", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": "" }, { "id": 47, "parent": 43, "name": "Verification", "level": 3, "hue": 253, "color": "#3f24a2", "weight": 1.0, "children": [], "note": "" }, { "id": 48, "parent": null, "name": "Policy", "level": 1, "hue": 281, "color": "#400f57", "weight": 12.0, "children": [49, 55, 56, 60, 61, 62], "note": "" }, { "id": 49, "parent": 48, "name": "Registration", "level": 2, "hue": 281, "color": "#5d187c", "weight": 5.0, "children": [50, 51, 52, 53, 54], "note": "" }, { "id": 50, "parent": 49, "name": "Fee and payment", "level": 3, "hue": 281, "color": "#7a24a2", "weight": 1.0, "children": [], "note": "" }, { "id": 51, "parent": 49, "name": "Age requirement", "level": 3, "hue": 281, "color": "#7a24a2", "weight": 1.0, "children": [], "note": "" }, { "id": 52, "parent": 49, "name": "Identification", "level": 3, "hue": 281, "color": "#7a24a2", "weight": 1.0, "children": [], "note": "" }, { "id": 53, "parent": 49, "name": "Test rescheduling and cancellation", "level": 3, "hue": 281, "color": "#7a24a2", "weight": 1.0, "children": [], "note": "" }, { "id": 54, "parent": 49, "name": "Refund", "level": 3, "hue": 281, "color": "#7a24a2", "weight": 1.0, "children": [], "note": "" }, { "id": 55, "parent": 48, "name": "Accommodation", "level": 2, "hue": 281, "color": "#5d187c", "weight": 1.0, "children": [], "note": "" }, { "id": 56, "parent": 48, "name": "Security (during test-taking)", "level": 2, "hue": 281, "color": "#5d187c", "weight": 3.0, "children": [57, 58, 59], "note": "" }, { "id": 57, "parent": 56, "name": "Malpractice and consequences", "level": 3, "hue": 281, "color": "#7a24a2", "weight": 1.0, "children": [], "note": "" }, { "id": 58, "parent": 56, "name": "Monitoring and detection", "level": 3, "hue": 281, "color": "#7a24a2", "weight": 1.0, "children": [], "note": "" }, { "id": 59, "parent": 56, "name": "Permitted and prohibited items/aids", "level": 3, "hue": 281, "color": "#7a24a2", "weight": 1.0, "children": [], "note": "" }, { "id": 60, "parent": 48, "name": "Confidentiality", "level": 2, "hue": 281, "color": "#5d187c", "weight": 1.0, "children": [], "note": "" }, { "id": 61, "parent": 48, "name": "Appeal", "level": 2, "hue": 281, "color": "#5d187c", "weight": 1.0, "children": [], "note": "" }, { "id": 62, "parent": 48, "name": "Retake", "level": 2, "hue": 281, "color": "#5d187c", "weight": 1.0, "children": [], "note": "" }, { "id": 63, "parent": null, "name": "Test quality", "level": 1, "hue": 320, "color": "#570f3f", "weight": 6.0, "children": [64, 65, 66, 67, 68, 69], "note": "" }, { "id": 64, "parent": 63, "name": "Test taker performance", "level": 2, "hue": 320, "color": "#761757", "weight": 1.0, "children": [], "note": "" }, { "id": 65, "parent": 63, "name": "Reliability statistics", "level": 2, "hue": 320, "color": "#761757", "weight": 1.0, "children": [], "note": "" }, { "id": 66, "parent": 63, "name": "Error estimate", "level": 2, "hue": 320, "color": "#761757", "weight": 1.0, "children": [], "note": "" }, { "id": 67, "parent": 63, "name": "Bias investigations", "level": 2, "hue": 320, "color": "#761757", "weight": 1.0, "children": [], "note": "" }, { "id": 68, "parent": 63, "name": "Washback", "level": 2, "hue": 320, "color": "#761757", "weight": 1.0, "children": [], "note": "" }, { "id": 69, "parent": 63, "name": "Alignment and score concordance", "level": 2, "hue": 320, "color": "#761757", "weight": 1.0, "children": [], "note": "" }, { "id": 70, "parent": null, "name": "Administration", "level": 1, "hue": 3, "color": "#57120f", "weight": 5.0, "children": [71, 72, 73, 74, 75], "note": "" }, { "id": 71, "parent": 70, "name": "Test venue", "level": 2, "hue": 3, "color": "#791c18", "weight": 1.0, "children": [], "note": "" }, { "id": 72, "parent": 70, "name": "Physical characteristics", "level": 2, "hue": 3, "color": "#791c18", "weight": 1.0, "children": [], "note": "" }, { "id": 73, "parent": 70, "name": "Technological requirements", "level": 2, "hue": 3, "color": "#791c18", "weight": 1.0, "children": [], "note": "" }, { "id": 74, "parent": 70, "name": "Instruction for interaction with equipment", "level": 2, "hue": 3, "color": "#791c18", "weight": 1.0, "children": [], "note": "" }, { "id": 75, "parent": 70, "name": "Test-day procedure", "level": 2, "hue": 3, "color": "#791c18", "weight": 1.0, "children": [], "note": "" }, { "id": 76, "parent": null, "name": "Test preparation", "level": 1, "hue": 24, "color": "#572c0f", "weight": 4.0, "children": [77, 78, 79, 80], "note": "" }, { "id": 77, "parent": 76, "name": "Sample test questions", "level": 2, "hue": 24, "color": "#6f3916", "weight": 1.0, "children": [], "note": "" }, { "id": 78, "parent": 76, "name": "Tips/strategies", "level": 2, "hue": 24, "color": "#6f3916", "weight": 1.0, "children": [], "note": "" }, { "id": 79, "parent": 76, "name": "Scored sample response (with commentary)", "level": 2, "hue": 24, "color": "#6f3916", "weight": 1.0, "children": [], "note": "" }, { "id": 80, "parent": 76, "name": "Other official preparation resources", "level": 2, "hue": 24, "color": "#6f3916", "weight": 1.0, "children": [], "note": "" }, { "id": 81, "parent": null, "name": "Test purpose and intended use", "level": 1, "hue": 44, "color": "#57440f", "weight": 4.0, "children": [82, 83, 84, 85], "note": "" }, { "id": 82, "parent": 81, "name": "Purpose", "level": 2, "hue": 44, "color": "#655014", "weight": 1.0, "children": [], "note": "" }, { "id": 83, "parent": 81, "name": "Use", "level": 2, "hue": 44, "color": "#655014", "weight": 1.0, "children": [], "note": "" }, { "id": 84, "parent": 81, "name": "Test taker population", "level": 2, "hue": 44, "color": "#655014", "weight": 1.0, "children": [], "note": "" }, { "id": 85, "parent": 81, "name": "Score user", "level": 2, "hue": 44, "color": "#655014", "weight": 1.0, "children": [], "note": "" }, { "id": 86, "parent": null, "name": "Construct", "level": 1, "hue": 81, "color": "#3e570f", "weight": 1.0, "children": [], "note": "" }, { "id": 87, "parent": null, "name": "Test development", "level": 1, "hue": 125, "color": "#0f5715", "weight": 1.0, "children": [], "note": "" }, { "id": 88, "parent": null, "name": "Updates", "level": 1, "hue": 168, "color": "#0f5748", "weight": 1.0, "children": [], "note": "" }];
+    const svg = document.getElementById('diagram');
+    const sectors = document.getElementById('sectors');
+    const rotator = document.getElementById('rotator');
+    const stage = document.getElementById('stage');
+    const arcDefs = document.getElementById('arc-defs');
+    const center = document.getElementById('centre');
+    const NS = 'http://www.w3.org/2000/svg';
+    const SIZE = 6620, C = SIZE / 2, CENTER = 420, WIDTH = 560, FONT = 64;
+    let rotation = 0, focused = null, active = null, pointer = null, labelsAnimating = false;
+    const ROTATION_SENSITIVITY = 0.27; // 27% of pointer angular movement
+    let view = { x: 0, y: 0, w: SIZE, h: SIZE };
+    const elements = new Map(), byId = new Map(NODES.map(n => [n.id, n]));
+
+    // The guide starts open on EVERY page load, regardless of prior visits.
+    const guidePanel = document.getElementById('tif-guide-panel');
+    const guideButton = document.getElementById('tif-guide-button');
+    const guideClose = document.getElementById('tif-guide-close');
+    function setGuideOpen(open) { guidePanel.hidden = !open; guideButton.setAttribute('aria-expanded', String(open)); }
+    guideButton.addEventListener('click', e => { e.stopPropagation(); setGuideOpen(guidePanel.hidden); });
+    guideClose.addEventListener('click', e => { e.stopPropagation(); setGuideOpen(false); guideButton.focus(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !guidePanel.hidden) setGuideOpen(false); });
+
+    // Replace this empty string with the Google Apps Script deployment URL ending /exec.
+    // The endpoint is public; do NOT put credentials, API keys, or a Sheet ID here.
+    const TIF_FEEDBACK_ENDPOINT = 'https://script.google.com/macros/s/AKfycby5ZbRxwx86ipsxVxtlHedgPFJVA-P3tQDBFdFRKvCgkVgA_F_1Z25rgMRhlb6gmYRzJA/exec';
+    const feedbackPanel = document.getElementById('tif-feedback-panel');
+    const feedbackButton = document.getElementById('tif-feedback-button');
+    const feedbackClose = document.getElementById('tif-feedback-close');
+    const feedbackForm = document.getElementById('tif-feedback-form');
+    const feedbackText = document.getElementById('tif-feedback-text');
+    const feedbackSubmit = document.getElementById('tif-feedback-submit');
+    const feedbackStatus = document.getElementById('tif-feedback-status');
+    let feedbackPending = false;
+    function setFeedbackOpen(open) {
+      feedbackPanel.hidden = !open;
+      feedbackButton.setAttribute('aria-expanded', String(open));
+      if (open) { setGuideOpen(false); feedbackText.focus({ preventScroll: true }); }
+    }
+    function feedbackMessage(message, kind = '') {
+      feedbackStatus.textContent = message;
+      feedbackStatus.dataset.kind = kind;
+    }
+    feedbackButton.addEventListener('click', e => {
+      e.stopPropagation(); setFeedbackOpen(feedbackPanel.hidden);
+    });
+    feedbackClose.addEventListener('click', e => {
+      e.stopPropagation(); setFeedbackOpen(false); feedbackButton.focus();
+    });
+    guideButton.addEventListener('click', () => { if (!guidePanel.hidden) setFeedbackOpen(false); });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape' && !feedbackPanel.hidden) { setFeedbackOpen(false); feedbackButton.focus(); }
+    });
+    feedbackText.addEventListener('input', () => {
+      feedbackSubmit.disabled = feedbackPending || !feedbackText.value.trim();
+      if (feedbackStatus.textContent) feedbackMessage('');
+    });
+    feedbackForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      if (feedbackPending) return;
+      const comment = feedbackText.value.trim();
+      if (!comment || comment.length > 3000) return;
+      if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(TIF_FEEDBACK_ENDPOINT)) {
+        feedbackMessage('Feedback submissions are not connected yet. Please try again later.', 'error'); return;
+      }
+      feedbackPending = true; feedbackSubmit.disabled = true;
+      feedbackMessage('Sending feedback…');
+      try {
+        const formBody = new URLSearchParams();
+        formBody.set('comment', comment);
+        formBody.set('website', document.getElementById('tif-feedback-trap').value);
+        // Apps Script does not provide standard cross-origin response headers.
+        // no-cors sends the request but cannot confirm that the Sheet was updated.
+        await fetch(TIF_FEEDBACK_ENDPOINT, { method: 'POST', mode: 'no-cors', redirect: 'follow', body: formBody, cache: 'no-store' });
+        feedbackText.value = '';
+        feedbackMessage('Your feedback was sent. Thank you.', 'success');
+      } catch (err) {
+        feedbackMessage('Could not send feedback. Please check your connection and try again.', 'error');
+      } finally {
+        feedbackPending = false; feedbackSubmit.disabled = !feedbackText.value.trim();
+      }
+    });
+
+    const notePopup = document.getElementById('tif-note-popup');
+    const noteTitle = document.getElementById('tif-note-title');
+    const noteBody = document.getElementById('tif-note-body');
+    let hoveredNoteId = null;
+    function hideNote() { hoveredNoteId = null; notePopup.hidden = true; }
+    function positionNote(e) {
+      if (notePopup.hidden) return;
+      const gap = 16, pad = 10;
+      const w = notePopup.offsetWidth, h = notePopup.offsetHeight;
+      let x = e.clientX + gap, y = e.clientY + gap;
+      if (x + w + pad > window.innerWidth) x = e.clientX - w - gap;
+      if (y + h + pad > window.innerHeight) y = e.clientY - h - gap;
+      notePopup.style.left = Math.max(pad, Math.min(x, window.innerWidth - w - pad)) + 'px';
+      notePopup.style.top = Math.max(pad, Math.min(y, window.innerHeight - h - pad)) + 'px';
+    }
+    function showSectorNote(node, e) {
+      if (pointer || labelsAnimating) { hideNote(); return; }
+      if (hoveredNoteId !== node.id) {
+        hoveredNoteId = node.id;
+        notePopup.style.setProperty('--note-accent', node.color || '#6c8fb0');
+        noteTitle.textContent = node.name;
+        noteBody.textContent = typeof node.note === 'string' ? node.note : '';
+        notePopup.hidden = false;
+      }
+      positionNote(e);
+    }
+    // Delegated handlers survive every regeneration of diagram nodes.
+    stage.addEventListener('pointermove', e => {
+      if (e.pointerType === 'touch' || pointer) { return; }
+      const g = e.target.closest('.node');
+      if (!g || !stage.contains(g)) { hideNote(); return; }
+      const id = Number(g.dataset.nodeId), node = byId.get(id);
+      if (node) showSectorNote(node, e); else hideNote();
+    });
+    stage.addEventListener('pointerleave', hideNote);
+    stage.addEventListener('pointerdown', hideNote);
+    stage.addEventListener('wheel', hideNote, { passive: true });
+    window.addEventListener('blur', hideNote);
+    function polar(r, a) { const t = a * Math.PI / 180; return [C + r * Math.cos(t), C + r * Math.sin(t)]; }
+    function sector(inner, outer, a, b) {
+      if (b - a < 0.002 || outer <= inner) return '';
+      // Split spans over 180 degrees so full-circle expansions remain valid SVG.
+      const points = Math.max(1, Math.ceil((b - a) / 170));
+      let d = '';
+      let p = polar(outer, a); d += `M${p[0]},${p[1]}`;
+      for (let i = 1; i <= points; i++) {
+        const q = polar(outer, a + (b - a) * i / points);
+        d += ` A${outer},${outer} 0 0,1 ${q[0]},${q[1]}`;
+      }
+      let q = polar(inner, b); d += ` L${q[0]},${q[1]}`;
+      for (let i = points - 1; i >= 0; i--) {
+        q = polar(inner, a + (b - a) * i / points);
+        d += ` A${inner},${inner} 0 0,0 ${q[0]},${q[1]}`;
+      }
+      return d + ' Z';
+    }
+    function fullRing(inner, outer) {
+      // Draw a complete annulus with no radial start/end seam.
+      // Even-odd means the inner disk is cut out of the outer disk.
+      const a = polar(outer, 0), b = polar(outer, 180);
+      const c = polar(inner, 0), d = polar(inner, 180);
+      return `M${a[0]},${a[1]} A${outer},${outer} 0 1,1 ${b[0]},${b[1]} A${outer},${outer} 0 1,1 ${a[0]},${a[1]} Z ` +
+        `M${c[0]},${c[1]} A${inner},${inner} 0 1,0 ${d[0]},${d[1]} A${inner},${inner} 0 1,0 ${c[0]},${c[1]} Z`;
+    }
+    function makeEl(name) { return document.createElementNS(NS, name); }
+    function isDescendant(id, ancestor) {
+      if (ancestor === null) return true;
+      let k = id;
+      while (k !== null) { if (k === ancestor) return true; k = byId.get(k).parent; }
+      return false;
+    }
+    // Expanded-sector labels follow true concentric SVG arcs; each expanded view
+    // uses one shared font size. The focused root label remains fixed at the top.
+    // The overview keeps its previous orientation and styling.
+    const FONT_EXPANDED = 100, LABEL_MARGIN = 20;
+    let sharedExpandedFont = FONT_EXPANDED;
+    let sharedOverviewFont = FONT; // One identical font size for every overview sector.
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    function measureLine(line, size) {
+      ctx.font = `500 ${size}px Arial, Helvetica, sans-serif`;
+      return ctx.measureText(line).width;
+    }
+    function makeLines(name, size, width) {
+      const words = name.split(/\s+/), lines = []; let current = '';
+      for (const word of words) {
+        const candidate = current ? current + ' ' + word : word;
+        if (current && measureLine(candidate, size) > width) { lines.push(current); current = word; }
+        else current = candidate;
+      }
+      if (current) lines.push(current);
+      return lines;
+    }
+    function makeArc(r, a, b, reverse = false) {
+      // The exact circular centreline, used as the text baseline.
+      // Short sectors become open arcs; full circles use an almost-full arc.
+      let from = reverse ? b : a, to = reverse ? a : b;
+      if (Math.abs(to - from) >= 359.999) {
+        from = -90; to = 269.99;
+      }
+      const [x1, y1] = polar(r, from), [x2, y2] = polar(r, to);
+      const span = Math.abs(to - from), large = span > 180 ? 1 : 0, sweep = reverse ? 0 : 1;
+      return `M${x1},${y1} A${r},${r} 0 ${large},${sweep} ${x2},${y2}`;
+    }
+    function isBottom(angle) {
+      const a = ((angle + rotation) % 360 + 360) % 360;
+      return a > 0 && a < 180;
+    }
+    // Each label is measured in BOTH directions. A tangential label must fit
+    // around the arc as well as between the inner and outer ring edges; a radial
+    // label must fit in the band and within the wedge's smallest angular width.
+    // This is a geometric fit, not a character-count threshold.
+    function balancedLines(name, size, maxLineWidth) {
+      const words = name.split(/\s+/);
+      const result = [];
+      let line = '';
+      for (const w of words) {
+        const tryLine = line ? line + ' ' + w : w;
+        if (line && measureLine(tryLine, size) > maxLineWidth) { result.push(line); line = w; }
+        else line = tryLine;
+      }
+      if (line) result.push(line);
+      return result;
+    }
+    function fitOption(name, size, inner, outer, span, isTangential) {
+      if (span < 0.1) return null;
+      const theta = span * Math.PI / 180;
+      const band = outer - inner;
+      const padding = Math.max(12, size * .24);
+      if (!isTangential) {
+        const maxW = band - 2 * padding;
+        const lines = balancedLines(name, size, maxW);
+        const thickness = (lines.length - 1) * size * 1.24 + size * 1.16;
+        const angularSpace = 2 * (inner + band / 2) * Math.sin(Math.min(Math.PI, theta) / 2);
+        if (thickness > angularSpace - 2 * padding) return null;
+        if (lines.some(t => measureLine(t, size) > maxW)) return null;
+        return { lines, size, radial: true };
+      }
+      // Each line occupies a separate, centred circular baseline. A fixed-font,
+      // word-preserving layout is found by exploring valid line breaks instead of
+      // using a greedy wrap that may paradoxically fail for a wider wedge.
+      const words = name.trim().split(/\s+/);
+      const lineStep = size * 1.24;
+      const maxLines = Math.min(words.length, Math.ceil((band - 2 * padding - size * 1.36) / lineStep) + 1);
+      for (let count = 1; count <= maxLines; count++) {
+        const half = (count - 1) * lineStep / 2;
+        const radii = Array.from({ length: count }, (_, i) => inner + band / 2 - half + i * lineStep);
+        if (radii[0] - size * .68 <= inner + padding) continue;
+        if (radii[count - 1] + size * .68 >= outer - padding) continue;
+        const limits = radii.map(r => Math.max(0, (r - size * .6) * theta - 2 * (padding + size * .08)));
+        const memo = new Map();
+        function solve(index, lineNo) {
+          if (lineNo === count) return index === words.length ? [] : null;
+          if (index >= words.length) return null;
+          const key = index + ':' + lineNo;
+          if (memo.has(key)) return memo.get(key);
+          const maxEnd = words.length - (count - lineNo - 1);
+          // Prefer balanced word groups but retain natural word order.
+          let best = null, bestScore = Infinity;
+          for (let end = index + 1; end <= maxEnd; end++) {
+            const text = words.slice(index, end).join(' ');
+            const measured = measureLine(text, size) * 1.04;
+            if (measured > limits[lineNo]) break;
+            const rest = solve(end, lineNo + 1);
+            if (rest !== null) {
+              const score = Math.pow(1 - measured / Math.max(limits[lineNo], 1), 2) + (rest.score || 0);
+              if (score < bestScore) { best = [text, ...rest]; best.score = score; bestScore = score; }
+            }
+          }
+          memo.set(key, best);
+          return best;
+        }
+        const lines = solve(0, 0);
+        if (lines) return { lines: Array.from(lines), size, radial: false };
+      }
+      return null;
+    }
+    function fitLabel(node, layout) {
+      const p = layout.get(node.id), el = elements.get(node.id);
+      if (p.opacity < 0.01 || p.b - p.a < 0.03) return;
+      const inner = CENTER + (p.level - 1) * WIDTH, outer = inner + WIDTH;
+      const midR = (inner + outer) / 2;
+      const span = Math.min(360, p.b - p.a);
+      const isFocusedRoot = focused !== null && node.id === focused && span > 359.99;
+      const overview = focused === null;
+      const preferredSize = overview ? sharedOverviewFont : sharedExpandedFont;
+      let chosen = null;
+      if (isFocusedRoot) {
+        const lines = balancedLines(node.name, preferredSize, WIDTH - 40);
+        chosen = { lines, size: preferredSize, radial: false, focusRoot: true };
+      } else if (!overview) {
+        // Never reduce individual labels. All expanded nodes use the same font.
+        chosen = fitOption(node.name, preferredSize, inner, outer, span, true);
+        // A safeguard against floating-point boundary rounding. The text remains
+        // at the shared size, and the layout computation above allocates space.
+        if (!chosen) chosen = { lines: [], size: preferredSize, radial: false };
+      } else {
+        // Strict overview uniformity: use the SAME font size for every label.
+        // The global size is selected before drawing any overview labels.
+        chosen = fitOption(node.name, sharedOverviewFont, inner, outer, span, false)
+          || fitOption(node.name, sharedOverviewFont, inner, outer, span, true);
+        if (!chosen) chosen = { lines: [], size: sharedOverviewFont, radial: true };
+      }
+      el.size = chosen.size;
+      el.lines = chosen.lines;
+      el.focusRoot = isFocusedRoot;
+      el.radial = chosen.radial;
+      while (el.label.firstChild) el.label.removeChild(el.label.firstChild);
+      for (const old of el.paths) old.remove();
+      el.paths = [];
+      for (let i = 0; i < chosen.lines.length; i++) {
+        const text = makeEl('text');
+        text.setAttribute('fill', 'white');
+        text.setAttribute('font-family', 'Arial,Helvetica,sans-serif');
+        text.setAttribute('font-size', chosen.size);
+        text.setAttribute('font-weight', '500');
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'middle');
+        text.setAttribute('pointer-events', 'none');
+        if (!overview && !isFocusedRoot) {
+          const path = makeEl('path');
+          const pathId = `tif-arc-${node.id}-${i}`;
+          path.setAttribute('id', pathId);
+          path.setAttribute('fill', 'none');
+          path.setAttribute('stroke', 'none');
+          arcDefs.appendChild(path);
+          el.paths.push(path);
+          const textPath = makeEl('textPath');
+          textPath.setAttribute('href', `#${pathId}`);
+          textPath.setAttributeNS('http://www.w3.org/1999/xlink', 'href', `#${pathId}`);
+          textPath.setAttribute('startOffset', '50%');
+          textPath.setAttribute('text-anchor', 'middle');
+          textPath.textContent = chosen.lines[i];
+          text.appendChild(textPath);
+        } else {
+          text.textContent = chosen.lines[i];
+        }
+        el.label.appendChild(text);
+      }
+    }
+    function updateAllLabels(layout) {
+      // The overview's single font size and geometry are solved together in
+      // computeLayout(). Never resize individual overview labels here.
+      for (const n of NODES) {
+        const el = elements.get(n.id);
+        for (const old of el.paths) old.remove();
+        el.paths = [];
+        fitLabel(n, layout);
+      }
+      render(layout);
+    }
+    for (const node of NODES) {
+      const g = makeEl('g'); g.setAttribute('class', 'node'); g.dataset.nodeId = String(node.id);
+      const path = makeEl('path'); path.setAttribute('fill', node.color); path.setAttribute('fill-rule', 'evenodd');
+      path.setAttribute('stroke', 'white'); path.setAttribute('stroke-width', '3');
+      g.appendChild(path);
+      const label = makeEl('g'); label.setAttribute('class', 'node-label');
+      g.appendChild(label);
+      // Custom note popup replaces the native SVG title tooltip.
+      g.addEventListener('click', e => {
+        if (pointerMoved || suppressClick) return;
+        e.stopPropagation();
+        if (node.children.length) { focus(node.id); }
+        else if (node.parent !== null) { focus(node.parent); }
+      });
+      sectors.appendChild(g); elements.set(node.id, { g, path, label, paths: [], lines: [], size: FONT });
+    }
+
+    // Compute a minimum safe angular allocation for each label and its children.
+    // All expanded labels use ONE shared font size.  If 80px cannot fit the
+    // entire subtree, the font size is lowered once for the complete view, never
+    // differently for individual sectors.
+    function minimumAngle(node, level, font, memo) {
+      const inner = CENTER + (level - 1) * WIDTH, outer = inner + WIDTH;
+      let own = 0;
+      if (level !== 1) {
+        let lo = 0.02, hi = 359.99;
+        if (!fitOption(node.name, font, inner, outer, hi, true)) {
+          own = 360;
+        } else {
+          for (let i = 0; i < 22; i++) {
+            const m = (lo + hi) / 2;
+            if (fitOption(node.name, font, inner, outer, m, true)) hi = m;
+            else lo = m;
+          }
+          own = hi + 0.5; // small buffer for browser font metrics
         }
       }
-      memo.set(key,best);
-      return best;
+      const childMinimum = node.children.reduce((total, id) =>
+        total + minimumAngle(byId.get(id), level + 1, font, memo), 0);
+      const required = Math.max(own, childMinimum);
+      memo.set(node.id, required);
+      return required;
     }
-    const lines=solve(0,0);
-    if(lines)return {lines:Array.from(lines),size,radial:false};
-  }
-  return null;
-}
-function fitLabel(node,layout){
-  const p=layout.get(node.id),el=elements.get(node.id);
-  if(p.opacity<0.01||p.b-p.a<0.03)return;
-  const inner=CENTER+(p.level-1)*WIDTH,outer=inner+WIDTH;
-  const midR=(inner+outer)/2;
-  const span=Math.min(360,p.b-p.a);
-  const isFocusedRoot=focused!==null && node.id===focused && span>359.99;
-  const overview=focused===null;
-  const preferredSize=overview?sharedOverviewFont:sharedExpandedFont;
-  let chosen=null;
-  if(isFocusedRoot){
-    const lines=balancedLines(node.name,preferredSize,WIDTH-40);
-    chosen={lines,size:preferredSize,radial:false,focusRoot:true};
-  }else if(!overview){
-    // Never reduce individual labels. All expanded nodes use the same font.
-    chosen=fitOption(node.name,preferredSize,inner,outer,span,true);
-    // A safeguard against floating-point boundary rounding. The text remains
-    // at the shared size, and the layout computation above allocates space.
-    if(!chosen)chosen={lines:[],size:preferredSize,radial:false};
-  }else{
-    // Strict overview uniformity: use the SAME font size for every label.
-    // The global size is selected before drawing any overview labels.
-    chosen=fitOption(node.name,sharedOverviewFont,inner,outer,span,false)
-        ||fitOption(node.name,sharedOverviewFont,inner,outer,span,true);
-    if(!chosen)chosen={lines:[],size:sharedOverviewFont,radial:true};
-  }
-  el.size=chosen.size;
-  el.lines=chosen.lines;
-  el.focusRoot=isFocusedRoot;
-  el.radial=chosen.radial;
-  while(el.label.firstChild)el.label.removeChild(el.label.firstChild);
-  for(const old of el.paths)old.remove();
-  el.paths=[];
-  for(let i=0;i<chosen.lines.length;i++){
-    const text=makeEl('text');
-    text.setAttribute('fill','white');
-    text.setAttribute('font-family','Arial,Helvetica,sans-serif');
-    text.setAttribute('font-size',chosen.size);
-    text.setAttribute('font-weight','500');
-    text.setAttribute('text-anchor','middle');
-    text.setAttribute('dominant-baseline','middle');
-    text.setAttribute('pointer-events','none');
-    if(!overview && !isFocusedRoot){
-      const path=makeEl('path');
-      const pathId=`tif-arc-${node.id}-${i}`;
-      path.setAttribute('id',pathId);
-      path.setAttribute('fill','none');
-      path.setAttribute('stroke','none');
-      arcDefs.appendChild(path);
-      el.paths.push(path);
-      const textPath=makeEl('textPath');
-      textPath.setAttribute('href',`#${pathId}`);
-      textPath.setAttributeNS('http://www.w3.org/1999/xlink','href',`#${pathId}`);
-      textPath.setAttribute('startOffset','50%');
-      textPath.setAttribute('text-anchor','middle');
-      textPath.textContent=chosen.lines[i];
-      text.appendChild(textPath);
-    }else{
-      text.textContent=chosen.lines[i];
-    }
-    el.label.appendChild(text);
-  }
-}
-function updateAllLabels(layout){
-  // The overview's single font size and geometry are solved together in
-  // computeLayout(). Never resize individual overview labels here.
-  for(const n of NODES){
-    const el=elements.get(n.id);
-    for(const old of el.paths)old.remove();
-    el.paths=[];
-    fitLabel(n,layout);
-  }
-  render(layout);
-}
-for(const node of NODES){
-  const g=makeEl('g');g.setAttribute('class','node');g.dataset.nodeId=String(node.id);
-  const path=makeEl('path');path.setAttribute('fill',node.color);path.setAttribute('fill-rule','evenodd');
-  path.setAttribute('stroke','white');path.setAttribute('stroke-width','3');
-  g.appendChild(path);
-  const label=makeEl('g');label.setAttribute('class','node-label');
-  g.appendChild(label);
-  // Custom note popup replaces the native SVG title tooltip.
-  g.addEventListener('click',e=>{
-    if(pointerMoved||suppressClick)return;
-    e.stopPropagation();
-    if(node.children.length){focus(node.id);}
-    else if(node.parent!==null){focus(node.parent);}
-  });
-  sectors.appendChild(g);elements.set(node.id,{g,path,label,paths:[],lines:[],size:FONT});
-}
-
-// Compute a minimum safe angular allocation for each label and its children.
-// All expanded labels use ONE shared font size.  If 80px cannot fit the
-// entire subtree, the font size is lowered once for the complete view, never
-// differently for individual sectors.
-function minimumAngle(node,level,font,memo){
-  const inner=CENTER+(level-1)*WIDTH,outer=inner+WIDTH;
-  let own=0;
-  if(level!==1){
-    let lo=0.02,hi=359.99;
-    if(!fitOption(node.name,font,inner,outer,hi,true)){
-      own=360;
-    }else{
-      for(let i=0;i<22;i++){
-        const m=(lo+hi)/2;
-        if(fitOption(node.name,font,inner,outer,m,true))hi=m;
-        else lo=m;
+    // For the overview, calculate the angular room each label actually needs.
+    // The chosen font is the largest single size that all nodes fit at once;
+    // extra space is divided among siblings using their original subtree weights.
+    function minimumOverviewAngle(node, level, font, memo) {
+      const inner = CENTER + (level - 1) * WIDTH, outer = inner + WIDTH;
+      let lo = 0.02, hi = 359.99;
+      const fits = span => fitOption(node.name, font, inner, outer, span, false)
+        || fitOption(node.name, font, inner, outer, span, true);
+      let own = 360;
+      if (fits(hi)) {
+        for (let i = 0; i < 22; i++) {
+          const mid = (lo + hi) / 2;
+          if (fits(mid)) hi = mid; else lo = mid;
+        }
+        own = hi + 0.5;
       }
-      own=hi+0.5; // small buffer for browser font metrics
+      const children = node.children.reduce((sum, id) =>
+        sum + minimumOverviewAngle(byId.get(id), level + 1, font, memo), 0);
+      const required = Math.max(own, children);
+      memo.set(node.id, required);
+      return required;
     }
-  }
-  const childMinimum=node.children.reduce((total,id)=>
-    total+minimumAngle(byId.get(id),level+1,font,memo),0);
-  const required=Math.max(own,childMinimum);
-  memo.set(node.id,required);
-  return required;
-}
-// For the overview, calculate the angular room each label actually needs.
-// The chosen font is the largest single size that all nodes fit at once;
-// extra space is divided among siblings using their original subtree weights.
-function minimumOverviewAngle(node,level,font,memo){
-  const inner=CENTER+(level-1)*WIDTH,outer=inner+WIDTH;
-  let lo=0.02,hi=359.99;
-  const fits=span=>fitOption(node.name,font,inner,outer,span,false)
-                  ||fitOption(node.name,font,inner,outer,span,true);
-  let own=360;
-  if(fits(hi)){
-    for(let i=0;i<22;i++){
-      const mid=(lo+hi)/2;
-      if(fits(mid))hi=mid;else lo=mid;
-    }
-    own=hi+0.5;
-  }
-  const children=node.children.reduce((sum,id)=>
-    sum+minimumOverviewAngle(byId.get(id),level+1,font,memo),0);
-  const required=Math.max(own,children);
-  memo.set(node.id,required);
-  return required;
-}
-function computeLayout(focusId){
-  const result=new Map();
-  const starts=focusId===null?NODES.filter(n=>n.parent===null):[byId.get(focusId)];
-  const weight=starts.reduce((s,n)=>s+n.weight,0);
-  const requirements=new Map();
-  if(focusId===null){
-    // The overview may change its sector angles, but not font size per label.
-    // Preserve the existing ring widths, colours and all expanded-view logic.
-    for(let size=FONT;size>=8;size-=2){
-      requirements.clear();
-      const required=starts.reduce((sum,n)=>
-        sum+minimumOverviewAngle(n,1,size,requirements),0);
-      if(required<=357){sharedOverviewFont=size;break;}
-      if(size===8)sharedOverviewFont=size;
-    }
-  }
-  if(focusId!==null){
-    // Select the largest single type size fitting the entire expanded tree.
-    for(let size=FONT_EXPANDED;size>=8;size-=2){
-      requirements.clear();
-      const needed=minimumAngle(starts[0],1,size,requirements);
-      if(needed<=357){sharedExpandedFont=size;break;}
-      if(size===8)sharedExpandedFont=size;
-    }
-  }
-  let a=-90;
-  function visit(node,a,b,level){
-    result.set(node.id,{a,b,level,opacity:1});
-    const children=node.children.map(k=>byId.get(k));
-    if(!children.length)return;
-    const total=children.reduce((s,n)=>s+n.weight,0);
-    const minTotal=children.reduce((s,n)=>s+(requirements.get(n.id)||0),0);
-    const extra=Math.max(0,b-a-minTotal);
-    let cur=a;
-    for(let i=0;i<children.length;i++){
-      const child=children[i];
-      const span=(requirements.get(child.id)||0)+extra*child.weight/total;
-      const next=i===children.length-1?b:cur+span;
-      visit(child,cur,next,level+1);cur=next;
-    }
-  }
-  for(const n of starts){
-    const min=requirements.get(n.id)||0;
-    const assigned=starts.length===1?360:min+(360-starts.reduce((total,k)=>total+(requirements.get(k.id)||0),0))*n.weight/weight;
-    const b=n===starts[starts.length-1]?270:a+assigned;
-    visit(n,a,b,1);a=b;
-  }
-  for(const n of NODES){
-    if(result.has(n.id))continue;
-    let k=n.parent;
-    while(k!==null&&!result.has(k))k=byId.get(k).parent;
-    const near=k===null?{a:-90,b:-90,level:1}:result.get(k);
-    const mid=(near.a+near.b)/2;
-    result.set(n.id,{a:mid,b:mid,level:near.level+1,opacity:0});
-  }
-  return result;
-}
-function lerp(a,b,t){return a+(b-a)*t;}
-function ease(t){return t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
-function render(layout){
-  rotator.setAttribute('transform',`rotate(${rotation} ${C} ${C})`);
-  for(const n of NODES){
-    const el=elements.get(n.id),p=layout.get(n.id);
-    const inner=CENTER+(p.level-1)*WIDTH,outer=inner+WIDTH;
-    const full=p.b-p.a>359.99;
-    const wholeFocusedRing=(focused!==null&&n.id===focused&&full);
-    el.path.setAttribute('d',wholeFocusedRing?fullRing(inner,outer):sector(inner,outer,p.a,p.b));
-    el.path.setAttribute('stroke-width',wholeFocusedRing?'0':'3');
-    el.path.setAttribute('stroke',wholeFocusedRing?'none':'white');
-    el.g.setAttribute('opacity',p.opacity);
-    el.label.style.visibility=labelsAnimating?'hidden':'visible';
-    const midR=(inner+outer)/2,midA=(p.a+p.b)/2;
-    if(el.focusRoot){
-      const fixedA=-90-rotation;
-      const [x,y]=polar(midR,fixedA);
-      // Straight tangential label fixed at the top of the focused ring.
-      el.label.setAttribute('transform',`translate(${x},${y}) rotate(${-rotation})`);
-      for(let i=0;i<el.lines.length;i++){
-        const t=el.label.children[i];
-        t.setAttribute('x','0');
-        t.setAttribute('y',String((i-(el.lines.length-1)/2)*el.size*1.18));
+    function computeLayout(focusId) {
+      const result = new Map();
+      const starts = focusId === null ? NODES.filter(n => n.parent === null) : [byId.get(focusId)];
+      const weight = starts.reduce((s, n) => s + n.weight, 0);
+      const requirements = new Map();
+      if (focusId === null) {
+        // The overview may change its sector angles, but not font size per label.
+        // Preserve the existing ring widths, colours and all expanded-view logic.
+        for (let size = FONT; size >= 8; size -= 2) {
+          requirements.clear();
+          const required = starts.reduce((sum, n) =>
+            sum + minimumOverviewAngle(n, 1, size, requirements), 0);
+          if (required <= 357) { sharedOverviewFont = size; break; }
+          if (size === 8) sharedOverviewFont = size;
+        }
       }
-    }else if(el.radial){
-      // Maintain upright text in screen coordinates for overview labels.
-      const [x,y]=polar(midR,midA);
-      const globalAngle=((midA+rotation)%360+360)%360;
-      const pointsLeft=globalAngle>90 && globalAngle<270;
-      const adjusted=midA+(pointsLeft?180:0);
-      el.label.setAttribute('transform',`translate(${x},${y}) rotate(${adjusted})`);
-      for(let i=0;i<el.lines.length;i++){
-        const t=el.label.children[i];
-        t.setAttribute('x','0');
-        t.setAttribute('y',String((i-(el.lines.length-1)/2)*el.size*1.18));
+      if (focusId !== null) {
+        // Select the largest single type size fitting the entire expanded tree.
+        for (let size = FONT_EXPANDED; size >= 8; size -= 2) {
+          requirements.clear();
+          const needed = minimumAngle(starts[0], 1, size, requirements);
+          if (needed <= 357) { sharedExpandedFont = size; break; }
+          if (size === 8) sharedExpandedFont = size;
+        }
       }
-    }else{
-      // Text follows the genuine circular arc, at each line's centred radius.
-      // Choose the path direction from the actual visible (rotated) half:
-      // the top uses clockwise paths; the bottom reverses them so no glyphs
-      // appear upside-down after dragging to rotate.
-      el.label.removeAttribute('transform');
-      const screenAngle=((midA+rotation)%360+360)%360;
-      const bottom=screenAngle>0 && screenAngle<180;
-      const lineStep=el.size*1.24;
-      for(let i=0;i<el.paths.length;i++){
-        // Ensure natural reading order across the stack of lines when the
-        // curved text direction reverses at the bottom of the circle.
-        const visualIndex=bottom ? i : el.paths.length-1-i;
-        const radius=midR+(visualIndex-(el.paths.length-1)/2)*lineStep;
-        el.paths[i].setAttribute('d',makeArc(radius,p.a,p.b,bottom));
+      let a = -90;
+      function visit(node, a, b, level) {
+        result.set(node.id, { a, b, level, opacity: 1 });
+        const children = node.children.map(k => byId.get(k));
+        if (!children.length) return;
+        const total = children.reduce((s, n) => s + n.weight, 0);
+        const minTotal = children.reduce((s, n) => s + (requirements.get(n.id) || 0), 0);
+        const extra = Math.max(0, b - a - minTotal);
+        let cur = a;
+        for (let i = 0; i < children.length; i++) {
+          const child = children[i];
+          const span = (requirements.get(child.id) || 0) + extra * child.weight / total;
+          const next = i === children.length - 1 ? b : cur + span;
+          visit(child, cur, next, level + 1); cur = next;
+        }
+      }
+      for (const n of starts) {
+        const min = requirements.get(n.id) || 0;
+        const assigned = starts.length === 1 ? 360 : min + (360 - starts.reduce((total, k) => total + (requirements.get(k.id) || 0), 0)) * n.weight / weight;
+        const b = n === starts[starts.length - 1] ? 270 : a + assigned;
+        visit(n, a, b, 1); a = b;
+      }
+      for (const n of NODES) {
+        if (result.has(n.id)) continue;
+        let k = n.parent;
+        while (k !== null && !result.has(k)) k = byId.get(k).parent;
+        const near = k === null ? { a: -90, b: -90, level: 1 } : result.get(k);
+        const mid = (near.a + near.b) / 2;
+        result.set(n.id, { a: mid, b: mid, level: near.level + 1, opacity: 0 });
+      }
+      return result;
+    }
+    function lerp(a, b, t) { return a + (b - a) * t; }
+    function ease(t) { return t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; }
+    function render(layout) {
+      rotator.setAttribute('transform', `rotate(${rotation} ${C} ${C})`);
+      for (const n of NODES) {
+        const el = elements.get(n.id), p = layout.get(n.id);
+        const inner = CENTER + (p.level - 1) * WIDTH, outer = inner + WIDTH;
+        const full = p.b - p.a > 359.99;
+        const wholeFocusedRing = (focused !== null && n.id === focused && full);
+        el.path.setAttribute('d', wholeFocusedRing ? fullRing(inner, outer) : sector(inner, outer, p.a, p.b));
+        el.path.setAttribute('stroke-width', wholeFocusedRing ? '0' : '3');
+        el.path.setAttribute('stroke', wholeFocusedRing ? 'none' : 'white');
+        el.g.setAttribute('opacity', p.opacity);
+        el.label.style.visibility = labelsAnimating ? 'hidden' : 'visible';
+        const midR = (inner + outer) / 2, midA = (p.a + p.b) / 2;
+        if (el.focusRoot) {
+          const fixedA = -90 - rotation;
+          const [x, y] = polar(midR, fixedA);
+          // Straight tangential label fixed at the top of the focused ring.
+          el.label.setAttribute('transform', `translate(${x},${y}) rotate(${-rotation})`);
+          for (let i = 0; i < el.lines.length; i++) {
+            const t = el.label.children[i];
+            t.setAttribute('x', '0');
+            t.setAttribute('y', String((i - (el.lines.length - 1) / 2) * el.size * 1.18));
+          }
+        } else if (el.radial) {
+          // Maintain upright text in screen coordinates for overview labels.
+          const [x, y] = polar(midR, midA);
+          const globalAngle = ((midA + rotation) % 360 + 360) % 360;
+          const pointsLeft = globalAngle > 90 && globalAngle < 270;
+          const adjusted = midA + (pointsLeft ? 180 : 0);
+          el.label.setAttribute('transform', `translate(${x},${y}) rotate(${adjusted})`);
+          for (let i = 0; i < el.lines.length; i++) {
+            const t = el.label.children[i];
+            t.setAttribute('x', '0');
+            t.setAttribute('y', String((i - (el.lines.length - 1) / 2) * el.size * 1.18));
+          }
+        } else {
+          // Text follows the genuine circular arc, at each line's centred radius.
+          // Choose the path direction from the actual visible (rotated) half:
+          // the top uses clockwise paths; the bottom reverses them so no glyphs
+          // appear upside-down after dragging to rotate.
+          el.label.removeAttribute('transform');
+          const screenAngle = ((midA + rotation) % 360 + 360) % 360;
+          const bottom = screenAngle > 0 && screenAngle < 180;
+          const lineStep = el.size * 1.24;
+          for (let i = 0; i < el.paths.length; i++) {
+            // Ensure natural reading order across the stack of lines when the
+            // curved text direction reverses at the bottom of the circle.
+            const visualIndex = bottom ? i : el.paths.length - 1 - i;
+            const radius = midR + (visualIndex - (el.paths.length - 1) / 2) * lineStep;
+            el.paths[i].setAttribute('d', makeArc(radius, p.a, p.b, bottom));
+          }
+        }
       }
     }
-  }
-}
-function targetView(id){
-  // Fit the expanded subtree to the visible viewport, centred on the chart.
-  // This also prevents a prior zoom/pan from leaving the expanded view offscreen.
-  let levels=MAX_LEVELS;
-  if(id!==null){
-    function subtreeDepth(k){
-      const n=byId.get(k);
-      return n.children.length ? 1+Math.max(...n.children.map(subtreeDepth)) : 1;
+    function targetView(id) {
+      // Fit the expanded subtree to the visible viewport, centred on the chart.
+      // This also prevents a prior zoom/pan from leaving the expanded view offscreen.
+      let levels = MAX_LEVELS;
+      if (id !== null) {
+        function subtreeDepth(k) {
+          const n = byId.get(k);
+          return n.children.length ? 1 + Math.max(...n.children.map(subtreeDepth)) : 1;
+        }
+        levels = subtreeDepth(id);
+      }
+      const diameter = 2 * (CENTER + levels * WIDTH + 90);
+      return { x: C - diameter / 2, y: C - diameter / 2, w: diameter, h: diameter };
     }
-    levels=subtreeDepth(id);
-  }
-  const diameter=2*(CENTER+levels*WIDTH+90);
-  return {x:C-diameter/2,y:C-diameter/2,w:diameter,h:diameter};
-}
-const MAX_LEVELS=Math.max(...NODES.map(n=>n.level));
-function tween(from,to,duration=850){
-  if(active)cancelAnimationFrame(active);
-  const startingView={...view}, endingView=targetView(focused);
-  const start=performance.now();
-  function tick(now){
-    const t=ease(Math.min(1,(now-start)/duration));const m=new Map();
-    for(const n of NODES){
-      const a=from.get(n.id),b=to.get(n.id);
-      m.set(n.id,{a:lerp(a.a,b.a,t),b:lerp(a.b,b.b,t),level:lerp(a.level,b.level,t),opacity:lerp(a.opacity,b.opacity,t)});
+    const MAX_LEVELS = Math.max(...NODES.map(n => n.level));
+    function tween(from, to, duration = 850) {
+      if (active) cancelAnimationFrame(active);
+      const startingView = { ...view }, endingView = targetView(focused);
+      const start = performance.now();
+      function tick(now) {
+        const t = ease(Math.min(1, (now - start) / duration)); const m = new Map();
+        for (const n of NODES) {
+          const a = from.get(n.id), b = to.get(n.id);
+          m.set(n.id, { a: lerp(a.a, b.a, t), b: lerp(a.b, b.b, t), level: lerp(a.level, b.level, t), opacity: lerp(a.opacity, b.opacity, t) });
+        }
+        current = m;
+        view = {
+          x: lerp(startingView.x, endingView.x, t), y: lerp(startingView.y, endingView.y, t),
+          w: lerp(startingView.w, endingView.w, t), h: lerp(startingView.h, endingView.h, t)
+        };
+        svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
+        render(m);
+        if (t < 1) active = requestAnimationFrame(tick);
+        else { active = null; updateAllLabels(current); labelsAnimating = false; render(current); }
+      }
+      active = requestAnimationFrame(tick);
     }
-    current=m;
-    view={x:lerp(startingView.x,endingView.x,t),y:lerp(startingView.y,endingView.y,t),
-          w:lerp(startingView.w,endingView.w,t),h:lerp(startingView.h,endingView.h,t)};
-    svg.setAttribute('viewBox',`${view.x} ${view.y} ${view.w} ${view.h}`);
-    render(m);
-    if(t<1)active=requestAnimationFrame(tick);
-    else {active=null;updateAllLabels(current);labelsAnimating=false;render(current);}
-  }
-  active=requestAnimationFrame(tick);
-}
-let current=computeLayout(null);
-function focus(id){
-  if(id===focused)return;
-  labelsAnimating=true;
-  // Hide every sector label before starting either direction of animation.
-  render(current);
-  focused=id;
-  tween(current,computeLayout(id),1100);
-}
-center.addEventListener('click',()=>{
-  if(pointerMoved || suppressClick)return;
-  if(focused===null)return;
-  // Always return directly to the complete framework from any depth.
-  focus(null);
-});
-
-function pointerDegrees(e){
-  // Use the actual chart centre, including when the viewBox has been panned.
-  const mid=svg.createSVGPoint(); mid.x=C;mid.y=C;
-  const screen=mid.matrixTransform(svg.getScreenCTM());
-  return Math.atan2(e.clientY-screen.y,e.clientX-screen.x)*180/Math.PI;
-}
-function angularDelta(now, before){
-  let d=now-before;
-  while(d>180)d-=360;
-  while(d< -180)d+=360;
-  return d;
-}
-let pointerMoved=false;
-let suppressClick=false;
-stage.addEventListener('selectstart',e=>e.preventDefault());
-stage.addEventListener('dragstart',e=>e.preventDefault());
-stage.addEventListener('pointerdown',e=>{
-  if(e.button!==0)return;
-  // Coloured sectors rotate; all other regions (including centre) pan.
-  const sectorTarget=e.target.closest('.node');
-  const mode=sectorTarget?'rotate':'pan';
-  pointer={id:e.pointerId,x:e.clientX,y:e.clientY,
-    lastX:e.clientX,lastY:e.clientY,
-    lastAngle:pointerDegrees(e),mode};
-  pointerMoved=false;
-});
-stage.addEventListener('pointermove',e=>{
-  if(!pointer||e.pointerId!==pointer.id)return;
-  if(!pointerMoved && Math.hypot(e.clientX-pointer.x,e.clientY-pointer.y)>6){
-    pointerMoved=true;
-    // Capture only after a real drag; otherwise it steals click events from
-    // coloured sectors, preventing the fan expansion from running.
-    stage.setPointerCapture(e.pointerId);
-  }
-  if(!pointerMoved)return;
-  if(pointer.mode==='rotate'){
-    const now=pointerDegrees(e);
-    rotation+=angularDelta(now,pointer.lastAngle)*ROTATION_SENSITIVITY;
-    pointer.lastAngle=now;
-    render(current);
-  }else{
-    const r=svg.getBoundingClientRect();
-    const dx=(e.clientX-pointer.lastX)*view.w/r.width;
-    const dy=(e.clientY-pointer.lastY)*view.h/r.height;
-    view.x-=dx; view.y-=dy;
-    svg.setAttribute('viewBox',`${view.x} ${view.y} ${view.w} ${view.h}`);
-  }
-  pointer.lastX=e.clientX;pointer.lastY=e.clientY;
-  stage.classList.add('dragging');
-});
-function release(e){
-  if(!pointer||e.pointerId!==pointer.id)return;
-  if(pointerMoved){
-    suppressClick=true;
-    // Chrome/Safari can synthesize a click on the capture target after release.
-    setTimeout(()=>{suppressClick=false;},0);
-  }
-  if(stage.hasPointerCapture(e.pointerId))stage.releasePointerCapture(e.pointerId);
-  pointer=null;
-  stage.classList.remove('dragging');
-  setTimeout(()=>{pointerMoved=false;},0);
-}
-stage.addEventListener('pointerup',release);
-stage.addEventListener('pointercancel',release);
-function svgPoint(e){const p=svg.createSVGPoint();p.x=e.clientX;p.y=e.clientY;return p.matrixTransform(svg.getScreenCTM().inverse());}
-stage.addEventListener('wheel',e=>{
-  e.preventDefault();
-  const delta=Math.max(-120,Math.min(120,e.deltaY));
-  const factor=Math.exp(-delta*0.00165); // approximately 22% per full wheel tick
-  const p=svgPoint(e), w=Math.min(SIZE*1.2,Math.max(420,view.w/factor));
-  const h=w;
-  view={x:p.x-(p.x-view.x)*w/view.w,y:p.y-(p.y-view.y)*h/view.h,w,h};
-  svg.setAttribute('viewBox',`${view.x} ${view.y} ${view.w} ${view.h}`);
-},{passive:false});
-render(current);
-updateAllLabels(current);
-
-// Touch input is handled separately in the capture phase, leaving the
-// original mouse/trackpad handlers completely unchanged.
-const touchContacts=new Map();
-let touchPinch=null,touchHoldTimer=null,touchHoldShown=false;
-let touchSuppressClicksUntil=0;
-const HOLD_MS=550, TOUCH_MOVE_THRESHOLD=9;
-function cancelTouchHold(){if(touchHoldTimer!==null){clearTimeout(touchHoldTimer);touchHoldTimer=null;}}
-function touchMidpoint(){
-  const a=Array.from(touchContacts.values());
-  return {x:(a[0].x+a[1].x)/2,y:(a[0].y+a[1].y)/2,
-          distance:Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y)};
-}
-function touchZoomAt(x,y,factor){
-  const p=svg.createSVGPoint();p.x=x;p.y=y;
-  const pos=p.matrixTransform(svg.getScreenCTM().inverse());
-  const w=Math.min(SIZE*1.2,Math.max(420,view.w/factor));
-  const h=view.h*w/view.w;
-  view={x:pos.x-(pos.x-view.x)*w/view.w,y:pos.y-(pos.y-view.y)*h/view.h,w,h};
-}
-function updateTouchViewport(){svg.setAttribute('viewBox',`${view.x} ${view.y} ${view.w} ${view.h}`);}
-// Only intercept touch. Mouse users retain the existing rotation/pan/click code.
-stage.addEventListener('pointerdown',e=>{
-  if(e.pointerType!=='touch')return;
-  e.preventDefault();e.stopImmediatePropagation();
-  const sectorGroup=e.target.closest('.node');
-  const nodeId=sectorGroup?Number(sectorGroup.dataset.nodeId):null;
-  const item={id:e.pointerId,x:e.clientX,y:e.clientY,startX:e.clientX,startY:e.clientY,
-    lastX:e.clientX,lastY:e.clientY,lastAngle:pointerDegrees(e),
-    mode:sectorGroup?'rotate':'pan',nodeId,
-    onCenter:!!e.target.closest('#centre'),moved:false};
-  touchContacts.set(e.pointerId,item);
-  touchSuppressClicksUntil=performance.now()+1000;
-  cancelTouchHold();touchHoldShown=false;
-  hideNote();closeExportMenu();
-  try{stage.setPointerCapture(e.pointerId);}catch(_){}
-  if(touchContacts.size===1 && nodeId!==null){
-    touchHoldTimer=setTimeout(()=>{
-      if(touchContacts.size!==1||item.moved||labelsAnimating)return;
-      const node=byId.get(nodeId);
-      if(node){touchHoldShown=true;showSectorNote(node,{clientX:item.x,clientY:item.y});}
-      touchHoldTimer=null;
-    },HOLD_MS);
-  }else if(touchContacts.size===2){
-    for(const contact of touchContacts.values())contact.moved=true;
-    touchPinch=touchMidpoint();
-  }else if(touchContacts.size>2)touchPinch=null;
-},{capture:true});
-stage.addEventListener('pointermove',e=>{
-  if(e.pointerType!=='touch'||!touchContacts.has(e.pointerId))return;
-  e.preventDefault();e.stopImmediatePropagation();
-  const item=touchContacts.get(e.pointerId);
-  item.x=e.clientX;item.y=e.clientY;
-  if(Math.hypot(item.x-item.startX,item.y-item.startY)>TOUCH_MOVE_THRESHOLD){
-    item.moved=true;cancelTouchHold();
-    if(!touchHoldShown)hideNote();
-  }
-  if(touchContacts.size===2){
-    cancelTouchHold();
-    const next=touchMidpoint();
-    if(touchPinch&&touchPinch.distance>0){
-      touchZoomAt(touchPinch.x,touchPinch.y,Math.max(0.75,Math.min(1.33,next.distance/touchPinch.distance)));
-      const rect=svg.getBoundingClientRect();
-      view.x-=(next.x-touchPinch.x)*view.w/rect.width;
-      view.y-=(next.y-touchPinch.y)*view.h/rect.height;
-      updateTouchViewport();
+    let current = computeLayout(null);
+    function focus(id) {
+      if (id === focused) return;
+      initialHandheldFraming = false;
+      labelsAnimating = true;
+      // Hide every sector label before starting either direction of animation.
+      render(current);
+      focused = id;
+      tween(current, computeLayout(id), 1100);
     }
-    touchPinch=next;
-  }else if(touchContacts.size===1 && item.moved && !touchHoldShown){
-    if(item.mode==='rotate'){
-      const angle=pointerDegrees(e);
-      rotation+=angularDelta(angle,item.lastAngle)*ROTATION_SENSITIVITY;
-      item.lastAngle=angle;render(current);
-    }else{
-      const rect=svg.getBoundingClientRect();
-      view.x-=(item.x-item.lastX)*view.w/rect.width;
-      view.y-=(item.y-item.lastY)*view.h/rect.height;
-      updateTouchViewport();
-    }
-  }
-  item.lastX=item.x;item.lastY=item.y;
-},{capture:true});
-function finishTouch(e){
-  if(e.pointerType!=='touch'||!touchContacts.has(e.pointerId))return;
-  e.preventDefault();e.stopImmediatePropagation();
-  cancelTouchHold();
-  const item=touchContacts.get(e.pointerId);
-  const wasSingle=touchContacts.size===1;
-  touchContacts.delete(e.pointerId);
-  if(wasSingle&&!item.moved&&!touchHoldShown&&!labelsAnimating){
-    if(item.onCenter){if(focused!==null)focus(null);}
-    else if(item.nodeId!==null){
-      const node=byId.get(item.nodeId);
-      if(node){if(node.children.length)focus(node.id);
-               else if(node.parent!==null)focus(node.parent);}
-    }
-  }
-  if(touchContacts.size<2)touchPinch=null;
-  if(touchContacts.size===1){
-    const remaining=Array.from(touchContacts.values())[0];
-    remaining.moved=true;remaining.lastX=remaining.x;remaining.lastY=remaining.y;
-    remaining.lastAngle=pointerDegrees({clientX:remaining.x,clientY:remaining.y});
-  }
-  if(touchContacts.size===0)touchHoldShown=false;
-  try{if(stage.hasPointerCapture(e.pointerId))stage.releasePointerCapture(e.pointerId);}catch(_){}
-  touchSuppressClicksUntil=performance.now()+700;
-}
-stage.addEventListener('pointerup',finishTouch,{capture:true});
-stage.addEventListener('pointercancel',finishTouch,{capture:true});
-// Suppress synthetic touch clicks; focus is handled on pointerup above.
-stage.addEventListener('click',e=>{
-  if(performance.now()<touchSuppressClicksUntil){e.preventDefault();e.stopImmediatePropagation();}
-},{capture:true});
-const touchNoteClose=document.getElementById('touch-note-close');
-touchNoteClose.addEventListener('click',e=>{e.stopPropagation();hideNote();});
-window.addEventListener('orientationchange',()=>{hideNote();cancelTouchHold();});
-
-// Export exactly the visible diagram state, including current rotation and
-// current zoom/pan; hide the toolbar from every exported image.
-const exportButton=document.getElementById('export-button');
-const exportMenu=document.getElementById('export-menu');
-function closeExportMenu(){exportMenu.hidden=true;exportButton.setAttribute('aria-expanded','false');}
-exportButton.addEventListener('click',e=>{
-  e.stopPropagation();
-  exportMenu.hidden=!exportMenu.hidden;
-  exportButton.setAttribute('aria-expanded',String(!exportMenu.hidden));
-});
-document.addEventListener('pointerdown',e=>{
-  if(!document.getElementById('export-control').contains(e.target))closeExportMenu();
-});
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeExportMenu();});
-function snapshotSvg(){
-  const clone=svg.cloneNode(true);
-  // Preserve the exact SVG viewport visible on screen.
-  clone.setAttribute('viewBox',svg.getAttribute('viewBox'));
-  clone.setAttribute('xmlns','http://www.w3.org/2000/svg');
-  clone.setAttribute('xmlns:xlink','http://www.w3.org/1999/xlink');
-  clone.setAttribute('preserveAspectRatio','xMidYMid meet');
-  const backdrop=document.createElementNS(NS,'rect');
-  backdrop.setAttribute('x',String(view.x));backdrop.setAttribute('y',String(view.y));
-  backdrop.setAttribute('width',String(view.w));backdrop.setAttribute('height',String(view.h));
-  backdrop.setAttribute('fill','white');
-  clone.insertBefore(backdrop,clone.firstChild);
-  // SVG textPath references must remain internal after serialization.
-  return new XMLSerializer().serializeToString(clone);
-}
-function saveBlob(blob,filename){
-  const url=URL.createObjectURL(blob),anchor=document.createElement('a');
-  anchor.href=url;anchor.download=filename;document.body.appendChild(anchor);
-  anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
-}
-function exportSVG(){
-  saveBlob(new Blob([snapshotSvg()],{type:'image/svg+xml;charset=utf-8'}),'TIF-diagram.svg');
-}
-async function exportPNG(){
-  const xml=snapshotSvg();
-  const url=URL.createObjectURL(new Blob([xml],{type:'image/svg+xml;charset=utf-8'}));
-  try{
-    const img=new Image();
-    await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;img.src=url;});
-    const screen=svg.getBoundingClientRect();
-    const scale=Math.min(3,4096/Math.max(screen.width,screen.height));
-    const w=Math.max(1,Math.round(screen.width*scale));
-    const h=Math.max(1,Math.round(screen.height*scale));
-    const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;
-    const ctx2=canvas.getContext('2d');
-    ctx2.fillStyle='#fff';ctx2.fillRect(0,0,w,h);
-    ctx2.drawImage(img,0,0,w,h);
-    const blob=await new Promise(resolve=>canvas.toBlob(resolve,'image/png'));
-    if(!blob)throw Error('PNG encoding was unavailable');
-    saveBlob(blob,'TIF-diagram.png');
-  }finally{URL.revokeObjectURL(url);}
-}
-function pdfSnapshotSvg(){
-  // Bounds from actually drawn sector geometry: export the whole visible
-  // hierarchy (including rotation), not browser viewport whitespace.
-  const clone=svg.cloneNode(true);
-  const inverse=svg.getScreenCTM().inverse();
-  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
-  for(const n of NODES){
-    const el=elements.get(n.id);
-    if(!el || Number(el.g.getAttribute('opacity'))<.5 || !el.path.getAttribute('d'))continue;
-    const box=el.path.getBoundingClientRect();
-    if(box.width<=0||box.height<=0)continue;
-    // Convert rotated screen bounds back into root SVG coordinates.
-    for(const [sx,sy] of [[box.left,box.top],[box.right,box.top],
-                           [box.left,box.bottom],[box.right,box.bottom]]){
-      const p=new DOMPoint(sx,sy).matrixTransform(inverse);
-      x0=Math.min(x0,p.x);x1=Math.max(x1,p.x);
-      y0=Math.min(y0,p.y);y1=Math.max(y1,p.y);
-    }
-  }
-  // Include the white centre and title even for an empty/near-empty chart.
-  x0=Math.min(x0,C-CENTER);x1=Math.max(x1,C+CENTER);
-  y0=Math.min(y0,C-CENTER);y1=Math.max(y1,C+CENTER);
-  const padding=Math.max(45,Math.min(x1-x0,y1-y0)*.025);
-  const bx=x0-padding,by=y0-padding;
-  const bw=x1-x0+2*padding,bh=y1-y0+2*padding;
-  clone.setAttribute('viewBox',`${bx} ${by} ${bw} ${bh}`);
-  clone.setAttribute('preserveAspectRatio','xMidYMid meet');
-  clone.setAttribute('xmlns','http://www.w3.org/2000/svg');
-  clone.setAttribute('xmlns:xlink','http://www.w3.org/1999/xlink');
-  // Retain the original geometry's aspect ratio. The print CSS sizes a
-  // container; SVG's aspect ratio is never stretched to match the paper.
-  clone.removeAttribute('width');clone.removeAttribute('height');
-  const allBackgrounds=clone.querySelectorAll('rect');
-  for(const r of allBackgrounds)r.remove();
-  const bg=document.createElementNS(NS,'rect');
-  bg.setAttribute('x',String(bx));bg.setAttribute('y',String(by));
-  bg.setAttribute('width',String(bw));bg.setAttribute('height',String(bh));
-  bg.setAttribute('fill','#fff');
-  clone.insertBefore(bg,clone.firstChild);
-  return new XMLSerializer().serializeToString(clone);
-}
-function exportPDF(){
-  // Vector PDF via browser printing; A3 landscape maximizes detail and leaves
-  // enough room for the diagram. No image rasterization or stretching.
-  const printWindow=window.open('','_blank');
-  if(!printWindow){alert('Please allow pop-ups to export the PDF.');return;}
-  const documentHtml='<!doctype html><html><head><meta charset="utf-8"><title>TIF diagram — high-resolution PDF</title>'+
-    '<style>@page{size:A3 landscape;margin:0}*{box-sizing:border-box}'+
-    'html,body{margin:0;width:100%;height:100%;background:white;overflow:hidden}'+
-    '.sheet{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:8mm}'+
-    '.sheet svg{display:block;width:100%;height:100%;max-width:100%;max-height:100%;'+
-    'flex:none;object-fit:contain;shape-rendering:geometricPrecision}'+
-    '@media print{html,body{print-color-adjust:exact;-webkit-print-color-adjust:exact}}'+
-    '</style></head><body><div class="sheet">'+pdfSnapshotSvg()+'</div></body></html>';
-  printWindow.document.open();printWindow.document.write(documentHtml);printWindow.document.close();
-  printWindow.focus();
-  const ready=()=>{
-    if(printWindow.closed)return;
-    // Font and vector text-path layout should finish before the print snapshot.
-    printWindow.document.fonts.ready.then(()=>{
-      printWindow.requestAnimationFrame(()=>printWindow.requestAnimationFrame(()=>{
-        if(!printWindow.closed){printWindow.focus();printWindow.print();}
-      }));
+    center.addEventListener('click', () => {
+      if (pointerMoved || suppressClick) return;
+      if (focused === null) return;
+      // Always return directly to the complete framework from any depth.
+      focus(null);
     });
-  };
-  if(printWindow.document.readyState==='complete')ready();
-  else printWindow.addEventListener('load',ready,{once:true});
-}
-exportMenu.addEventListener('click',e=>{
-  const choice=e.target.closest('button[data-export]');
-  if(!choice)return;
-  closeExportMenu();
-  if(choice.dataset.export==='svg')exportSVG();
-  else if(choice.dataset.export==='png')exportPNG().catch(err=>{console.error(err);alert('Could not export PNG. Please try SVG.');});
-  else if(choice.dataset.export==='pdf')exportPDF();
-});
-</script></body></html>
+
+    function pointerDegrees(e) {
+      // Use the actual chart centre, including when the viewBox has been panned.
+      const mid = svg.createSVGPoint(); mid.x = C; mid.y = C;
+      const screen = mid.matrixTransform(svg.getScreenCTM());
+      return Math.atan2(e.clientY - screen.y, e.clientX - screen.x) * 180 / Math.PI;
+    }
+    function angularDelta(now, before) {
+      let d = now - before;
+      while (d > 180) d -= 360;
+      while (d < -180) d += 360;
+      return d;
+    }
+    let pointerMoved = false;
+    let suppressClick = false;
+    stage.addEventListener('selectstart', e => e.preventDefault());
+    stage.addEventListener('dragstart', e => e.preventDefault());
+    stage.addEventListener('pointerdown', e => {
+      if (e.button !== 0) return;
+      // Coloured sectors rotate; all other regions (including centre) pan.
+      const sectorTarget = e.target.closest('.node');
+      const mode = sectorTarget ? 'rotate' : 'pan';
+      pointer = {
+        id: e.pointerId, x: e.clientX, y: e.clientY,
+        lastX: e.clientX, lastY: e.clientY,
+        lastAngle: pointerDegrees(e), mode
+      };
+      pointerMoved = false;
+    });
+    stage.addEventListener('pointermove', e => {
+      if (!pointer || e.pointerId !== pointer.id) return;
+      if (!pointerMoved && Math.hypot(e.clientX - pointer.x, e.clientY - pointer.y) > 6) {
+        pointerMoved = true;
+        // Capture only after a real drag; otherwise it steals click events from
+        // coloured sectors, preventing the fan expansion from running.
+        stage.setPointerCapture(e.pointerId);
+      }
+      if (!pointerMoved) return;
+      initialHandheldFraming = false;
+      if (pointer.mode === 'rotate') {
+        const now = pointerDegrees(e);
+        rotation += angularDelta(now, pointer.lastAngle) * ROTATION_SENSITIVITY;
+        pointer.lastAngle = now;
+        render(current);
+      } else {
+        const r = svg.getBoundingClientRect();
+        const dx = (e.clientX - pointer.lastX) * view.w / r.width;
+        const dy = (e.clientY - pointer.lastY) * view.h / r.height;
+        view.x -= dx; view.y -= dy;
+        svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
+      }
+      pointer.lastX = e.clientX; pointer.lastY = e.clientY;
+      stage.classList.add('dragging');
+    });
+    function release(e) {
+      if (!pointer || e.pointerId !== pointer.id) return;
+      if (pointerMoved) {
+        suppressClick = true;
+        // Chrome/Safari can synthesize a click on the capture target after release.
+        setTimeout(() => { suppressClick = false; }, 0);
+      }
+      if (stage.hasPointerCapture(e.pointerId)) stage.releasePointerCapture(e.pointerId);
+      pointer = null;
+      stage.classList.remove('dragging');
+      setTimeout(() => { pointerMoved = false; }, 0);
+    }
+    stage.addEventListener('pointerup', release);
+    stage.addEventListener('pointercancel', release);
+    function svgPoint(e) { const p = svg.createSVGPoint(); p.x = e.clientX; p.y = e.clientY; return p.matrixTransform(svg.getScreenCTM().inverse()); }
+    stage.addEventListener('wheel', e => {
+      initialHandheldFraming = false;
+      e.preventDefault();
+      const delta = Math.max(-120, Math.min(120, e.deltaY));
+      const factor = Math.exp(-delta * 0.00165); // approximately 22% per full wheel tick
+      const p = svgPoint(e), w = Math.min(SIZE * 1.2, Math.max(420, view.w / factor));
+      const h = w;
+      view = { x: p.x - (p.x - view.x) * w / view.w, y: p.y - (p.y - view.y) * h / view.h, w, h };
+      svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
+    }, { passive: false });
+    render(current);
+    updateAllLabels(current);
+
+    // Frame the actual geometry of the coloured overview on touch devices.
+    // The base 6620-unit SVG contains significant unused white margins; using
+    // its full square viewBox on portrait devices can appear visually off-centre.
+    // Desktop view and existing subsequent navigation are left unchanged.
+    let initialHandheldFraming = true;
+    function fitInitialHandheldOverview() {
+      if (!document.documentElement.classList.contains('tif-handheld') || !initialHandheldFraming || focused !== null) return;
+      const bounds = rotator.getBBox();
+      if (!bounds.width || !bounds.height) return;
+      const rect = stage.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      const ratio = rect.width / rect.height;
+      const pad = Math.max(75, Math.max(bounds.width, bounds.height) * 0.045);
+      // Keep the fixed white TIF centre exactly at the screen midpoint.
+      // Fit the asymmetric outer branches using the larger extent on each axis.
+      const extentX = Math.max(Math.abs(bounds.x - C), Math.abs(bounds.x + bounds.width - C));
+      const extentY = Math.max(Math.abs(bounds.y - C), Math.abs(bounds.y + bounds.height - C));
+      const widthNeeded = 2 * (extentX + pad);
+      const heightNeeded = 2 * (extentY + pad);
+      const w = Math.max(widthNeeded, heightNeeded * ratio);
+      const h = w / ratio;
+      view = { x: C - w / 2, y: C - h / 2, w, h };
+      svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
+    }
+    // Resize before first paint if possible; adjust again after mobile browser
+    // chrome settles, but never override the user's own pan/zoom/navigation.
+    fitInitialHandheldOverview();
+    requestAnimationFrame(() => fitInitialHandheldOverview());
+    if (window.visualViewport) { window.visualViewport.addEventListener('resize', fitInitialHandheldOverview); }
+    window.addEventListener('resize', fitInitialHandheldOverview);
+
+    // Touch input is handled separately in the capture phase, leaving the
+    // original mouse/trackpad handlers completely unchanged.
+    const touchContacts = new Map();
+    let touchPinch = null, touchHoldTimer = null, touchHoldShown = false;
+    let touchSuppressClicksUntil = 0;
+    const HOLD_MS = 550, TOUCH_MOVE_THRESHOLD = 9;
+    function cancelTouchHold() { if (touchHoldTimer !== null) { clearTimeout(touchHoldTimer); touchHoldTimer = null; } }
+    function touchMidpoint() {
+      const a = Array.from(touchContacts.values());
+      return {
+        x: (a[0].x + a[1].x) / 2, y: (a[0].y + a[1].y) / 2,
+        distance: Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y)
+      };
+    }
+    function touchZoomAt(x, y, factor) {
+      const p = svg.createSVGPoint(); p.x = x; p.y = y;
+      const pos = p.matrixTransform(svg.getScreenCTM().inverse());
+      const w = Math.min(SIZE * 1.2, Math.max(420, view.w / factor));
+      const h = view.h * w / view.w;
+      view = { x: pos.x - (pos.x - view.x) * w / view.w, y: pos.y - (pos.y - view.y) * h / view.h, w, h };
+    }
+    function updateTouchViewport() { svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`); }
+    // Only intercept touch. Mouse users retain the existing rotation/pan/click code.
+    stage.addEventListener('pointerdown', e => {
+      if (e.pointerType !== 'touch') return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      const sectorGroup = e.target.closest('.node');
+      const nodeId = sectorGroup ? Number(sectorGroup.dataset.nodeId) : null;
+      const item = {
+        id: e.pointerId, x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY,
+        lastX: e.clientX, lastY: e.clientY, lastAngle: pointerDegrees(e),
+        mode: sectorGroup ? 'rotate' : 'pan', nodeId,
+        onCenter: !!e.target.closest('#centre'), moved: false
+      };
+      touchContacts.set(e.pointerId, item);
+      initialHandheldFraming = false;
+      touchSuppressClicksUntil = performance.now() + 1000;
+      cancelTouchHold(); touchHoldShown = false;
+      hideNote(); closeExportMenu();
+      try { stage.setPointerCapture(e.pointerId); } catch (_) { }
+      if (touchContacts.size === 1 && nodeId !== null) {
+        touchHoldTimer = setTimeout(() => {
+          if (touchContacts.size !== 1 || item.moved || labelsAnimating) return;
+          const node = byId.get(nodeId);
+          if (node) { touchHoldShown = true; showSectorNote(node, { clientX: item.x, clientY: item.y }); }
+          touchHoldTimer = null;
+        }, HOLD_MS);
+      } else if (touchContacts.size === 2) {
+        for (const contact of touchContacts.values()) contact.moved = true;
+        touchPinch = touchMidpoint();
+      } else if (touchContacts.size > 2) touchPinch = null;
+    }, { capture: true });
+    stage.addEventListener('pointermove', e => {
+      if (e.pointerType !== 'touch' || !touchContacts.has(e.pointerId)) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      const item = touchContacts.get(e.pointerId);
+      item.x = e.clientX; item.y = e.clientY;
+      if (Math.hypot(item.x - item.startX, item.y - item.startY) > TOUCH_MOVE_THRESHOLD) {
+        item.moved = true; cancelTouchHold();
+        if (!touchHoldShown) hideNote();
+      }
+      if (touchContacts.size === 2) {
+        cancelTouchHold();
+        const next = touchMidpoint();
+        if (touchPinch && touchPinch.distance > 0) {
+          touchZoomAt(touchPinch.x, touchPinch.y, Math.max(0.75, Math.min(1.33, next.distance / touchPinch.distance)));
+          const rect = svg.getBoundingClientRect();
+          view.x -= (next.x - touchPinch.x) * view.w / rect.width;
+          view.y -= (next.y - touchPinch.y) * view.h / rect.height;
+          updateTouchViewport();
+        }
+        touchPinch = next;
+      } else if (touchContacts.size === 1 && item.moved && !touchHoldShown) {
+        if (item.mode === 'rotate') {
+          const angle = pointerDegrees(e);
+          rotation += angularDelta(angle, item.lastAngle) * ROTATION_SENSITIVITY;
+          item.lastAngle = angle; render(current);
+        } else {
+          const rect = svg.getBoundingClientRect();
+          view.x -= (item.x - item.lastX) * view.w / rect.width;
+          view.y -= (item.y - item.lastY) * view.h / rect.height;
+          updateTouchViewport();
+        }
+      }
+      item.lastX = item.x; item.lastY = item.y;
+    }, { capture: true });
+    function finishTouch(e) {
+      if (e.pointerType !== 'touch' || !touchContacts.has(e.pointerId)) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+      cancelTouchHold();
+      const item = touchContacts.get(e.pointerId);
+      const wasSingle = touchContacts.size === 1;
+      touchContacts.delete(e.pointerId);
+      if (wasSingle && !item.moved && !touchHoldShown && !labelsAnimating) {
+        if (item.onCenter) { if (focused !== null) focus(null); }
+        else if (item.nodeId !== null) {
+          const node = byId.get(item.nodeId);
+          if (node) {
+            if (node.children.length) focus(node.id);
+            else if (node.parent !== null) focus(node.parent);
+          }
+        }
+      }
+      if (touchContacts.size < 2) touchPinch = null;
+      if (touchContacts.size === 1) {
+        const remaining = Array.from(touchContacts.values())[0];
+        remaining.moved = true; remaining.lastX = remaining.x; remaining.lastY = remaining.y;
+        remaining.lastAngle = pointerDegrees({ clientX: remaining.x, clientY: remaining.y });
+      }
+      if (touchContacts.size === 0) touchHoldShown = false;
+      try { if (stage.hasPointerCapture(e.pointerId)) stage.releasePointerCapture(e.pointerId); } catch (_) { }
+      touchSuppressClicksUntil = performance.now() + 700;
+    }
+    stage.addEventListener('pointerup', finishTouch, { capture: true });
+    stage.addEventListener('pointercancel', finishTouch, { capture: true });
+    // Suppress synthetic touch clicks; focus is handled on pointerup above.
+    stage.addEventListener('click', e => {
+      if (performance.now() < touchSuppressClicksUntil) { e.preventDefault(); e.stopImmediatePropagation(); }
+    }, { capture: true });
+    const touchNoteClose = document.getElementById('touch-note-close');
+    touchNoteClose.addEventListener('click', e => { e.stopPropagation(); hideNote(); });
+    window.addEventListener('orientationchange', () => { hideNote(); cancelTouchHold(); });
+
+    // Export exactly the visible diagram state, including current rotation and
+    // current zoom/pan; hide the toolbar from every exported image.
+    const exportButton = document.getElementById('export-button');
+    const exportMenu = document.getElementById('export-menu');
+    function closeExportMenu() { exportMenu.hidden = true; exportButton.setAttribute('aria-expanded', 'false'); }
+    exportButton.addEventListener('click', e => {
+      e.stopPropagation();
+      exportMenu.hidden = !exportMenu.hidden;
+      exportButton.setAttribute('aria-expanded', String(!exportMenu.hidden));
+    });
+    document.addEventListener('pointerdown', e => {
+      if (!document.getElementById('export-control').contains(e.target)) closeExportMenu();
+    });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeExportMenu(); });
+    function snapshotSvg() {
+      const clone = svg.cloneNode(true);
+      // Preserve the exact SVG viewport visible on screen.
+      clone.setAttribute('viewBox', svg.getAttribute('viewBox'));
+      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+      clone.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+      const backdrop = document.createElementNS(NS, 'rect');
+      backdrop.setAttribute('x', String(view.x)); backdrop.setAttribute('y', String(view.y));
+      backdrop.setAttribute('width', String(view.w)); backdrop.setAttribute('height', String(view.h));
+      backdrop.setAttribute('fill', 'white');
+      clone.insertBefore(backdrop, clone.firstChild);
+      // SVG textPath references must remain internal after serialization.
+      return new XMLSerializer().serializeToString(clone);
+    }
+    function saveBlob(blob, filename) {
+      const url = URL.createObjectURL(blob), anchor = document.createElement('a');
+      anchor.href = url; anchor.download = filename; document.body.appendChild(anchor);
+      anchor.click(); anchor.remove(); setTimeout(() => URL.revokeObjectURL(url), 1500);
+    }
+    function exportSVG() {
+      saveBlob(new Blob([snapshotSvg()], { type: 'image/svg+xml;charset=utf-8' }), 'TIF-diagram.svg');
+    }
+    async function exportPNG() {
+      const xml = snapshotSvg();
+      const url = URL.createObjectURL(new Blob([xml], { type: 'image/svg+xml;charset=utf-8' }));
+      try {
+        const img = new Image();
+        await new Promise((resolve, reject) => { img.onload = resolve; img.onerror = reject; img.src = url; });
+        const screen = svg.getBoundingClientRect();
+        const scale = Math.min(3, 4096 / Math.max(screen.width, screen.height));
+        const w = Math.max(1, Math.round(screen.width * scale));
+        const h = Math.max(1, Math.round(screen.height * scale));
+        const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+        const ctx2 = canvas.getContext('2d');
+        ctx2.fillStyle = '#fff'; ctx2.fillRect(0, 0, w, h);
+        ctx2.drawImage(img, 0, 0, w, h);
+        const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+        if (!blob) throw Error('PNG encoding was unavailable');
+        saveBlob(blob, 'TIF-diagram.png');
+      } finally { URL.revokeObjectURL(url); }
+    }
+    function pdfSnapshotSvg() {
+      // Bounds from actually drawn sector geometry: export the whole visible
+      // hierarchy (including rotation), not browser viewport whitespace.
+      const clone = svg.cloneNode(true);
+      const inverse = svg.getScreenCTM().inverse();
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const n of NODES) {
+        const el = elements.get(n.id);
+        if (!el || Number(el.g.getAttribute('opacity')) < .5 || !el.path.getAttribute('d')) continue;
+        const box = el.path.getBoundingClientRect();
+        if (box.width <= 0 || box.height <= 0) continue;
+        // Convert rotated screen bounds back into root SVG coordinates.
+        for (const [sx, sy] of [[box.left, box.top], [box.right, box.top],
+        [box.left, box.bottom], [box.right, box.bottom]]) {
+          const p = new DOMPoint(sx, sy).matrixTransform(inverse);
+          x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x);
+          y0 = Math.min(y0, p.y); y1 = Math.max(y1, p.y);
+        }
+      }
+      // Include the white centre and title even for an empty/near-empty chart.
+      x0 = Math.min(x0, C - CENTER); x1 = Math.max(x1, C + CENTER);
+      y0 = Math.min(y0, C - CENTER); y1 = Math.max(y1, C + CENTER);
+      const padding = Math.max(45, Math.min(x1 - x0, y1 - y0) * .025);
+      const bx = x0 - padding, by = y0 - padding;
+      const bw = x1 - x0 + 2 * padding, bh = y1 - y0 + 2 * padding;
+      clone.setAttribute('viewBox', `${bx} ${by} ${bw} ${bh}`);
+      clone.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+      clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+      clone.setAttribute('xmlns:xlink', 'http://www.w3.org/1999/xlink');
+      // Retain the original geometry's aspect ratio. The print CSS sizes a
+      // container; SVG's aspect ratio is never stretched to match the paper.
+      clone.removeAttribute('width'); clone.removeAttribute('height');
+      const allBackgrounds = clone.querySelectorAll('rect');
+      for (const r of allBackgrounds) r.remove();
+      const bg = document.createElementNS(NS, 'rect');
+      bg.setAttribute('x', String(bx)); bg.setAttribute('y', String(by));
+      bg.setAttribute('width', String(bw)); bg.setAttribute('height', String(bh));
+      bg.setAttribute('fill', '#fff');
+      clone.insertBefore(bg, clone.firstChild);
+      return new XMLSerializer().serializeToString(clone);
+    }
+    function exportPDF() {
+      // Vector PDF via browser printing; A3 landscape maximizes detail and leaves
+      // enough room for the diagram. No image rasterization or stretching.
+      const printWindow = window.open('', '_blank');
+      if (!printWindow) { alert('Please allow pop-ups to export the PDF.'); return; }
+      const documentHtml = '<!doctype html><html><head><meta charset="utf-8"><title>TIF diagram — high-resolution PDF</title>' +
+        '<style>@page{size:A3 landscape;margin:0}*{box-sizing:border-box}' +
+        'html,body{margin:0;width:100%;height:100%;background:white;overflow:hidden}' +
+        '.sheet{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:8mm}' +
+        '.sheet svg{display:block;width:100%;height:100%;max-width:100%;max-height:100%;' +
+        'flex:none;object-fit:contain;shape-rendering:geometricPrecision}' +
+        '@media print{html,body{print-color-adjust:exact;-webkit-print-color-adjust:exact}}' +
+        '</style></head><body><div class="sheet">' + pdfSnapshotSvg() + '</div></body></html>';
+      printWindow.document.open(); printWindow.document.write(documentHtml); printWindow.document.close();
+      printWindow.focus();
+      const ready = () => {
+        if (printWindow.closed) return;
+        // Font and vector text-path layout should finish before the print snapshot.
+        printWindow.document.fonts.ready.then(() => {
+          printWindow.requestAnimationFrame(() => printWindow.requestAnimationFrame(() => {
+            if (!printWindow.closed) { printWindow.focus(); printWindow.print(); }
+          }));
+        });
+      };
+      if (printWindow.document.readyState === 'complete') ready();
+      else printWindow.addEventListener('load', ready, { once: true });
+    }
+    exportMenu.addEventListener('click', e => {
+      const choice = e.target.closest('button[data-export]');
+      if (!choice) return;
+      closeExportMenu();
+      if (choice.dataset.export === 'svg') exportSVG();
+      else if (choice.dataset.export === 'png') exportPNG().catch(err => { console.error(err); alert('Could not export PNG. Please try SVG.'); });
+      else if (choice.dataset.export === 'pdf') exportPDF();
+    });
+  </script>
+</body>
+
+</html>
