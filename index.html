@@ -674,6 +674,82 @@
         display: none !important
       }
     }
+
+    /* Fixed grey hierarchy summary; deliberately outside the rotating SVG. */
+    #tif-layer-report[hidden] {
+      display: none !important
+    }
+
+    #tif-layer-report {
+      position: fixed;
+      z-index: 18;
+      right: max(18px, env(safe-area-inset-right));
+      bottom: max(18px, env(safe-area-inset-bottom));
+      width: 145px;
+      font: 500 12px/1.15 Arial, Helvetica, sans-serif;
+      color: #737b85;
+      text-align: center;
+      pointer-events: none;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      user-select: none;
+      -webkit-user-select: none
+    }
+
+    #tif-layer-report .tif-layer-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      column-gap: 2px;
+      row-gap: 0;
+      align-items: center
+    }
+
+    #tif-layer-report .tif-layer-heading {
+      font-weight: 500
+    }
+
+    #tif-layer-report .tif-layer-number {
+      font-weight: 700;
+      color: #59626f;
+      font-variant-numeric: tabular-nums
+    }
+
+    #tif-layer-report .tif-terminal-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 2px;
+      margin-top: 2px;
+      padding-top: 2px;
+      border-top: 1px solid #d5d9df;
+      text-align: left
+    }
+
+    #tif-layer-report .tif-layer-number.tif-number-reveal {
+      animation: tif-count-reveal 540ms ease-out both;
+      animation-delay: var(--count-delay, 0ms)
+    }
+
+    @keyframes tif-count-reveal {
+      0% {
+        clip-path: inset(0 100% 0 0)
+      }
+
+      100% {
+        clip-path: inset(0 0 0 0)
+      }
+    }
+
+    html.tif-handheld #tif-layer-report {
+      right: max(12px, env(safe-area-inset-right));
+      bottom: max(12px, env(safe-area-inset-bottom))
+    }
+
+    @media print {
+      #tif-layer-report {
+        display: none !important
+      }
+    }
   </style>
 </head>
 
@@ -759,6 +835,7 @@
     <div id="tif-note-title"></div>
     <div id="tif-note-body"></div>
   </div>
+  <aside id="tif-layer-report" aria-label="Units by layer" aria-live="off"></aside>
   <div id="stage"><svg id="diagram" xmlns="http://www.w3.org/2000/svg" width="6620" height="6620"
       viewBox="0 0 6620 6620">
       <rect x="0" y="0" width="6620" height="6620" fill="white" />
@@ -1174,6 +1251,77 @@
       memo.set(node.id, required);
       return required;
     }
+    // Count five hierarchy layers and the terminal units (nodes without children).
+    // Only the overview and a focused main category display this fixed report.
+    const layerReport = document.getElementById('tif-layer-report');
+    function layerCounts(focusId) {
+      if (focusId !== null && byId.get(focusId).level !== 1) return null;
+      const origin = focusId === null ? 0 : byId.get(focusId).level;
+      const counts = [0, 0, 0, 0, 0, 0]; // Layers 1–5 plus terminal units.
+      for (const node of NODES) {
+        if (focusId !== null && !isDescendant(node.id, focusId)) continue;
+        const layer = focusId === null ? node.level : node.level - origin + 1;
+        if (layer >= 1 && layer <= 5) counts[layer - 1]++;
+        if (node.children.length === 0) counts[5]++;
+      }
+      return counts;
+    }
+    let reportCounts = layerCounts(null);
+    function reportRows(counts, animate) {
+      layerReport.replaceChildren();
+      const grid = document.createElement('div');
+      grid.className = 'tif-layer-grid';
+      // The labels stay in the first row, with each value directly below it.
+      for (let i = 0; i < 5; i++) {
+        const label = document.createElement('span');
+        label.className = 'tif-layer-heading';
+        label.textContent = `L${i + 1}`;
+        grid.appendChild(label);
+      }
+      for (let i = 0; i < 5; i++) {
+        const value = document.createElement('span');
+        value.className = 'tif-layer-number';
+        value.textContent = String(counts[i] ?? 0);
+        if (animate) {
+          // Previous digits were removed with replaceChildren(); never overlap.
+          value.classList.add('tif-number-reveal');
+          value.style.setProperty('--count-delay', `${170 + i * 65}ms`);
+        }
+        grid.appendChild(value);
+      }
+      layerReport.appendChild(grid);
+      const terminal = document.createElement('div');
+      terminal.className = 'tif-terminal-row';
+      const label = document.createElement('span'); label.textContent = 'Terminal units';
+      const value = document.createElement('span');
+      value.className = 'tif-layer-number';
+      value.textContent = String(counts[5] ?? 0);
+      if (animate) {
+        value.classList.add('tif-number-reveal');
+        value.style.setProperty('--count-delay', '495ms');
+      }
+      terminal.append(label, value);
+      layerReport.appendChild(terminal);
+    }
+    function startLayerReportTransition(nextFocus) {
+      const nextCounts = layerCounts(nextFocus);
+      if (nextCounts) {
+        layerReport.hidden = false;
+        // Replaces old digits immediately, then reveals new digits left-to-right.
+        reportRows(nextCounts, true);
+      }
+      // When navigating into a layer-2-or-deeper view, hide the report
+      // synchronously at the start of the transition, not after its animation.
+      else layerReport.hidden = true;
+    }
+    function finishLayerReportTransition() {
+      reportCounts = layerCounts(focused);
+      if (reportCounts) {
+        reportRows(reportCounts, false);
+        layerReport.hidden = false;
+      } else layerReport.hidden = true;
+    }
+    reportRows(reportCounts, false);
     function computeLayout(focusId) {
       const result = new Map();
       const starts = focusId === null ? NODES.filter(n => n.parent === null) : [byId.get(focusId)];
@@ -1320,7 +1468,7 @@
         svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
         render(m);
         if (t < 1) active = requestAnimationFrame(tick);
-        else { active = null; updateAllLabels(current); labelsAnimating = false; render(current); }
+        else { active = null; updateAllLabels(current); labelsAnimating = false; render(current); finishLayerReportTransition(); }
       }
       active = requestAnimationFrame(tick);
     }
@@ -1328,6 +1476,7 @@
     function focus(id) {
       if (id === focused) return;
       initialHandheldFraming = false;
+      startLayerReportTransition(id);
       labelsAnimating = true;
       // Hide every sector label before starting either direction of animation.
       render(current);
