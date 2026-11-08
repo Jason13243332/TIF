@@ -927,7 +927,7 @@
         // no-cors sends the request but cannot confirm that the Sheet was updated.
         await fetch(TIF_FEEDBACK_ENDPOINT, { method: 'POST', mode: 'no-cors', redirect: 'follow', body: formBody, cache: 'no-store' });
         feedbackText.value = '';
-        feedbackMessage('Your feedback was sent for processing. Thank you.', 'success');
+        feedbackMessage('Your feedback was sent. Thank you.', 'success');
       } catch (err) {
         feedbackMessage('Could not send feedback. Please check your connection and try again.', 'error');
       } finally {
