@@ -750,6 +750,201 @@
         display: none !important
       }
     }
+
+    /* Table view: white minimal academic rules, same toolbar geometry as existing icons. */
+    #tif-view-control {
+      position: fixed;
+      z-index: 41;
+      top: 18px;
+      left: 70px;
+      font-family: Arial, Helvetica, sans-serif
+    }
+
+    #tif-view-button {
+      width: 43px;
+      height: 43px;
+      display: grid;
+      place-items: center;
+      background: white;
+      color: #172b42;
+      border: 1px solid #d8dde5;
+      border-radius: 4px;
+      box-shadow: 0 2px 9px #14253b1e;
+      cursor: pointer
+    }
+
+    #tif-view-button:hover,
+    #tif-view-button:focus-visible {
+      background: #f2f5f9
+    }
+
+    #tif-view-button svg {
+      height: 21px;
+      width: 21px
+    }
+
+    #tif-feedback-control {
+      left: 122px
+    }
+
+    html.tif-handheld #tif-view-control {
+      top: max(12px, env(safe-area-inset-top));
+      left: calc(max(12px, env(safe-area-inset-left)) + 58px)
+    }
+
+    html.tif-handheld #tif-view-button {
+      width: 48px;
+      height: 48px
+    }
+
+    html.tif-handheld #tif-feedback-control {
+      left: calc(max(12px, env(safe-area-inset-left)) + 116px)
+    }
+
+    #tif-view-table[hidden] {
+      display: none !important
+    }
+
+    /* The table is a fixed viewport; ONLY its interior scrolls. The sticky header
+   belongs to that scrollport, so tbody content can never paint above it. */
+    #tif-view-table {
+      position: fixed;
+      inset: 0;
+      overflow: hidden;
+      background: #fff;
+      z-index: 10;
+      padding: 67px max(24px, calc((100vw - 1340px)/2)) 0;
+      display: flex;
+      flex-direction: column;
+      user-select: text !important;
+      -webkit-user-select: text !important
+    }
+
+    #tif-view-table * {
+      user-select: text !important;
+      -webkit-user-select: text !important
+    }
+
+    #tif-table-wrap {
+      min-width: 0;
+      width: 100%;
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable
+    }
+
+    #tif-hierarchy-table {
+      width: 100%;
+      min-width: 690px;
+      border-collapse: separate;
+      border-spacing: 0;
+      table-layout: fixed;
+      background: #fff;
+      color: #202b39;
+      font: 14px/1.4 Arial, Helvetica, sans-serif
+    }
+
+    #tif-hierarchy-table thead th {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: #fff;
+      border-bottom: 2px solid #65717d;
+      text-align: left;
+      padding: 11px 13px;
+      color: #344253;
+      font-weight: 700
+    }
+
+    #tif-hierarchy-table tbody td {
+      vertical-align: top;
+      padding: 11px 13px;
+      border-bottom: 1px solid #e3e7eb;
+      overflow-wrap: break-word;
+      word-break: normal
+    }
+
+    /* Highlight the hovered hierarchy cell and its existing ancestors only. */
+    #tif-hierarchy-table tbody td.tif-table-cell-highlight,
+    #tif-hierarchy-table tbody td:focus-within {
+      background: #edf2f7 !important
+    }
+
+    /* Slightly larger note hit area around the text only; negative margin preserves the table layout. */
+    #tif-hierarchy-table .tif-table-unit {
+      cursor: help;
+      color: inherit;
+      display: inline-block;
+      max-width: 100%;
+      padding: 4px 6px;
+      margin: -4px -6px;
+      outline-offset: 3px;
+      border-radius: 2px
+    }
+
+    #tif-hierarchy-table .tif-table-unit:focus-visible {
+      outline: 2px solid #789bc1
+    }
+
+    #tif-hierarchy-table tbody td:empty::after {
+      content: ' '
+    }
+
+    body.tif-table-mode #stage,
+    body.tif-table-mode #tif-layer-report {
+      display: none !important
+    }
+
+    #tif-guide-table-desktop,
+    #tif-guide-table-touch {
+      display: none
+    }
+
+    body.tif-table-mode #tif-guide-desktop,
+    body.tif-table-mode #tif-guide-touch {
+      display: none !important
+    }
+
+    body.tif-table-mode #tif-guide-table-desktop {
+      display: block
+    }
+
+    html.tif-handheld body.tif-table-mode #tif-guide-table-desktop {
+      display: none
+    }
+
+    html.tif-handheld body.tif-table-mode #tif-guide-table-touch {
+      display: block
+    }
+
+    .tif-guide-inline-icon {
+      display: inline-block;
+      width: 21px;
+      height: 21px;
+      vertical-align: middle;
+      margin: 0 5px;
+      color: #172b42
+    }
+
+    @media(max-width:720px) {
+      #tif-view-table {
+        padding: 65px 14px 0
+      }
+
+      #tif-hierarchy-table {
+        font-size: 13px
+      }
+    }
+
+    @media print {
+
+      #tif-view-control,
+      #tif-view-table {
+        display: none !important
+      }
+    }
   </style>
 </head>
 
@@ -775,6 +970,11 @@
         <li><strong>“Drag”</strong> the white background to move the diagram.</li>
         <li><strong>“Scroll”</strong> to zoom in or out.</li>
         <li><strong>“Hover”</strong> over a coloured area to view its notes.</li>
+        <li><strong>“Click”</strong> <svg class="tif-guide-inline-icon" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="1.2" />
+            <path d="M3 10h18M3 15h18M9 4v16M15 4v16" />
+          </svg> to open the table view.</li>
       </ol>
       <ol id="tif-guide-touch" class="tif-guide-list">
         <li><strong>“Tap”</strong> a coloured area to view its subcategories.</li>
@@ -784,10 +984,43 @@
         <li><strong>“Drag”</strong> the white background to move the diagram.</li>
         <li><strong>“Pinch”</strong> with two fingers to zoom in or out.</li>
         <li><strong>“Press and hold”</strong> a coloured area to view its notes.</li>
+        <li><strong>“Tap”</strong> <svg class="tif-guide-inline-icon" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="3" y="4" width="18" height="16" rx="1.2" />
+            <path d="M3 10h18M3 15h18M9 4v16M15 4v16" />
+          </svg> to open the table view.</li>
+      </ol>
+      <ol id="tif-guide-table-desktop" class="tif-guide-list">
+        <li><strong>“Scroll”</strong> vertically or horizontally to explore the framework.</li>
+        <li><strong>“Hover”</strong> over a unit to view its notes.</li>
+        <li><strong>“Click”</strong> <svg class="tif-guide-inline-icon" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <circle cx="12" cy="12" r="5.3" />
+            <circle cx="12" cy="12" r="2" />
+            <path d="M12 3v7M12 14v7M3 12h7M14 12h7M5.6 5.6l4.9 4.9M13.5 13.5l4.9 4.9" />
+          </svg> to return to the diagram.</li>
+      </ol>
+      <ol id="tif-guide-table-touch" class="tif-guide-list">
+        <li><strong>“Scroll”</strong> vertically or horizontally to explore the framework.</li>
+        <li><strong>“Press and hold”</strong> a unit to view its notes.</li>
+        <li><strong>“Tap”</strong> <svg class="tif-guide-inline-icon" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="9" />
+            <circle cx="12" cy="12" r="5.3" />
+            <circle cx="12" cy="12" r="2" />
+            <path d="M12 3v7M12 14v7M3 12h7M14 12h7M5.6 5.6l4.9 4.9M13.5 13.5l4.9 4.9" />
+          </svg> to return to the diagram.</li>
       </ol>
     </section>
   </div>
 
+  <div id="tif-view-control"><button id="tif-view-button" type="button" aria-label="Switch to table view"
+      title="Switch to table view"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+        stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="3" y="4" width="18" height="16" rx="1.2" />
+        <path d="M3 10h18M3 15h18M9 4v16M15 4v16" />
+      </svg></button></div>
   <div id="tif-feedback-control">
     <button id="tif-feedback-button" type="button" aria-label="Feedback" aria-controls="tif-feedback-panel"
       aria-expanded="false" title="Feedback">
@@ -836,6 +1069,22 @@
     <div id="tif-note-body"></div>
   </div>
   <aside id="tif-layer-report" aria-label="Units by layer" aria-live="off"></aside>
+  <main id="tif-view-table" hidden aria-label="TIF table view">
+    <div id="tif-table-wrap">
+      <table id="tif-hierarchy-table">
+        <thead>
+          <tr>
+            <th scope="col">L1</th>
+            <th scope="col">L2</th>
+            <th scope="col">L3</th>
+            <th scope="col">L4</th>
+            <th scope="col">L5</th>
+          </tr>
+        </thead>
+        <tbody id="tif-table-body"></tbody>
+      </table>
+    </div>
+  </main>
   <div id="stage"><svg id="diagram" xmlns="http://www.w3.org/2000/svg" width="6620" height="6620"
       viewBox="0 0 6620 6620">
       <rect x="0" y="0" width="6620" height="6620" fill="white" />
@@ -927,7 +1176,7 @@
         // no-cors sends the request but cannot confirm that the Sheet was updated.
         await fetch(TIF_FEEDBACK_ENDPOINT, { method: 'POST', mode: 'no-cors', redirect: 'follow', body: formBody, cache: 'no-store' });
         feedbackText.value = '';
-        feedbackMessage('Your feedback was sent. Thank you.', 'success');
+        feedbackMessage('Your feedback was sent.', 'success');
       } catch (err) {
         feedbackMessage('Could not send feedback. Please check your connection and try again.', 'error');
       } finally {
@@ -1732,6 +1981,7 @@
     function closeExportMenu() { exportMenu.hidden = true; exportButton.setAttribute('aria-expanded', 'false'); }
     exportButton.addEventListener('click', e => {
       e.stopPropagation();
+      if (tifView === 'table') { closeExportMenu(); exportTablePDF(); return; }
       if (document.documentElement.classList.contains('tif-handheld')) {
         closeExportMenu();
         if (mobileExportBusy || labelsAnimating) return;
@@ -1939,6 +2189,173 @@
       };
       if (printWindow.document.readyState === 'complete') ready();
       else printWindow.addEventListener('load', ready, { once: true });
+    }
+
+    // One underlying data model: table contains one row per terminal TIF unit.
+    // Table descriptions are the existing unit-specific notes, displayed through
+    // the same fixed popup; no duplicate note content and no extra data storage.
+    let tifView = 'diagram', tableHoldTimer = null, tableHoldStart = null;
+    const viewButton = document.getElementById('tif-view-button');
+    const tableView = document.getElementById('tif-view-table');
+    const tableBody = document.getElementById('tif-table-body');
+    const TABLE_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="1.2"/><path d="M3 10h18M3 15h18M9 4v16M15 4v16"/></svg>`;
+    const SUNBURST_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5.3"/><circle cx="12" cy="12" r="2"/><path d="M12 3v7M12 14v7M3 12h7M14 12h7M5.6 5.6l4.9 4.9M13.5 13.5l4.9 4.9"/></svg>`;
+    // Sort complete hierarchy groups from simpler to more complex: maximum
+    // path depth first, terminal-unit count second, then original framework order.
+    // This keeps members of a shared parent contiguous for correct row merging.
+    const tifTableCellByNode = new Map();
+    function makeHierarchyTable() {
+      const terminalCount = new Map(), maximumDepth = new Map();
+      function stats(node) {
+        if (!node.children || !node.children.length) { terminalCount.set(node.id, 1); maximumDepth.set(node.id, 1); return; }
+        const children = node.children.map(id => byId.get(id)).filter(Boolean);
+        children.forEach(stats);
+        terminalCount.set(node.id, children.reduce((s, n) => s + terminalCount.get(n.id), 0));
+        maximumDepth.set(node.id, 1 + Math.max(0, ...children.map(n => maximumDepth.get(n.id))));
+      }
+      const roots = NODES.filter(n => n.parent === null);
+      roots.forEach(stats);
+      const orderedPaths = [];
+      function walk(node, ancestors = []) {
+        const path = [...ancestors, node];
+        if (!node.children || !node.children.length) { orderedPaths.push(path); return; }
+        const original = node.children.map(id => byId.get(id)).filter(Boolean);
+        // Stable tie ordering follows the framework source.
+        original.sort((a, b) => maximumDepth.get(a.id) - maximumDepth.get(b.id) || terminalCount.get(a.id) - terminalCount.get(b.id));
+        original.forEach(child => walk(child, path));
+      }
+      roots.sort((a, b) => maximumDepth.get(a.id) - maximumDepth.get(b.id) || terminalCount.get(a.id) - terminalCount.get(b.id));
+      roots.forEach(root => walk(root));
+      const fragment = document.createDocumentFragment();
+      tifTableCellByNode.clear();
+      for (let row = 0; row < orderedPaths.length; row++) {
+        const path = orderedPaths[row];
+        const tr = document.createElement('tr');
+        for (let layer = 0; layer < 5; layer++) {
+          const node = path[layer];
+          // A common node across adjacent paths occupies one vertically merged cell.
+          if (node && layer < 4 && row > 0 && orderedPaths[row - 1][layer]?.id === node.id) continue;
+          const td = document.createElement('td');
+          if (node) {
+            if (layer < 4) {
+              let spanCount = 1;
+              while (row + spanCount < orderedPaths.length && orderedPaths[row + spanCount][layer]?.id === node.id) spanCount++;
+              if (spanCount > 1) td.rowSpan = spanCount;
+            }
+            const span = document.createElement('span');
+            span.className = 'tif-table-unit'; span.tabIndex = 0;
+            span.dataset.nodeId = String(node.id);
+            span.textContent = node.name;
+            td.appendChild(span);
+            tifTableCellByNode.set(node.id, td);
+          }
+          tr.appendChild(td);
+        }
+        fragment.appendChild(tr);
+      }
+      tableBody.replaceChildren(fragment);
+    }
+    let tifHighlightedCells = [];
+    function clearTableRowHighlight() {
+      for (const cell of tifHighlightedCells) cell.classList.remove('tif-table-cell-highlight');
+      tifHighlightedCells = [];
+    }
+    // Highlight only the real, non-empty cells from L1 through the hovered level.
+    // Find ancestors by node ID, not by physical <tr> position, since parent
+    // cells can have rowSpan and thus live in entirely different DOM rows.
+    function highlightTableRow(target) {
+      const cell = target instanceof Element ? target.closest('#tif-table-body td') : null;
+      const unit = cell?.querySelector('.tif-table-unit');
+      const node = unit ? byId.get(Number(unit.dataset.nodeId)) : null;
+      if (!node) { clearTableRowHighlight(); return; }
+      const next = [];
+      let ancestor = node;
+      while (ancestor) {
+        const ancestorCell = tifTableCellByNode.get(ancestor.id);
+        if (ancestorCell) next.push(ancestorCell);
+        ancestor = ancestor.parent === null ? null : byId.get(ancestor.parent);
+      }
+      // Do not restart highlighting while moving within an unchanged cell.
+      if (next.length === tifHighlightedCells.length && next.every(c => tifHighlightedCells.includes(c))) return;
+      clearTableRowHighlight();
+      for (const ancestorCell of next) ancestorCell.classList.add('tif-table-cell-highlight');
+      tifHighlightedCells = next;
+    }
+    makeHierarchyTable();
+    function switchTifView(next) {
+      if (tifView === next) return;
+      hideNote(); closeExportMenu();
+      tifView = next;
+      const isTable = next === 'table';
+      document.body.classList.toggle('tif-table-mode', isTable);
+      tableView.hidden = !isTable;
+      viewButton.innerHTML = isTable ? SUNBURST_ICON : TABLE_ICON;
+      viewButton.setAttribute('aria-label', isTable ? 'Return to diagram view' : 'Switch to table view');
+      viewButton.title = isTable ? 'Return to diagram view' : 'Switch to table view';
+      exportButton.setAttribute('aria-label', isTable ? 'Download table PDF' : 'Export diagram');
+      exportButton.title = isTable ? 'Download table PDF' : 'Export diagram';
+      document.getElementById('tif-table-wrap').scrollTop = 0; document.getElementById('tif-table-wrap').scrollLeft = 0;
+      clearTableRowHighlight();
+      if (!isTable) { window.requestAnimationFrame(() => { svg.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`); }); }
+    }
+    viewButton.addEventListener('click', () => switchTifView(tifView === 'diagram' ? 'table' : 'diagram'));
+    function tableUnitForTarget(target) {
+      if (!(target instanceof Element)) return null;
+      const span = target.closest('.tif-table-unit');
+      return span && tableView.contains(span) ? byId.get(Number(span.dataset.nodeId)) : null;
+    }
+    // Hover and keyboard focus use exactly the existing diagram note styling.
+    tableView.addEventListener('pointermove', e => {
+      if (e.pointerType === 'touch') return;
+      highlightTableRow(e.target);
+      const node = tableUnitForTarget(e.target);
+      if (node) showSectorNote(node, e); else hideNote();
+    });
+    tableView.addEventListener('pointerleave', () => { hideNote(); clearTableRowHighlight(); });
+    tableView.addEventListener('focusin', e => {
+      const node = tableUnitForTarget(e.target);
+      if (node) { const box = e.target.getBoundingClientRect(); showSectorNote(node, { clientX: box.left, clientY: box.bottom }); }
+    });
+    tableView.addEventListener('focusout', e => { if (!e.relatedTarget || !tableView.contains(e.relatedTarget)) hideNote(); });
+    function clearTableHold() { if (tableHoldTimer !== null) { clearTimeout(tableHoldTimer); tableHoldTimer = null; } tableHoldStart = null; }
+    tableView.addEventListener('pointerdown', e => {
+      if (e.pointerType !== 'touch') return;
+      clearTableHold(); hideNote();
+      const node = tableUnitForTarget(e.target);
+      if (!node) return;
+      tableHoldStart = { x: e.clientX, y: e.clientY };
+      const loc = { clientX: e.clientX, clientY: e.clientY };
+      tableHoldTimer = setTimeout(() => {
+        tableHoldTimer = null;
+        if (tifView === 'table') showSectorNote(node, loc);
+      }, 540);
+    });
+    tableView.addEventListener('pointermove', e => {
+      if (e.pointerType === 'touch' && tableHoldStart && Math.hypot(e.clientX - tableHoldStart.x, e.clientY - tableHoldStart.y) > 10) clearTableHold();
+    });
+    for (const type of ['pointerup', 'pointercancel', 'scroll']) tableView.addEventListener(type, clearTableHold, { passive: true });
+    // Accessible first-party PDF save flow: browser print dialog -> Save as PDF.
+    // Print all terminal units with repeated table headers and no popup/toolbar.
+    function exportTablePDF() {
+      const win = window.open('', '_blank');
+      if (!win) { alert('Please allow pop-ups to export the table as PDF.'); return; }
+      const clean = tableView.querySelector('#tif-hierarchy-table').cloneNode(true);
+      clean.querySelectorAll('[tabindex]').forEach(el => el.removeAttribute('tabindex'));
+      clean.querySelectorAll('.tif-table-cell-highlight').forEach(el => el.classList.remove('tif-table-cell-highlight'));
+      const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>TIF hierarchy table</title><style>' +
+        '@page{size:A3 landscape;margin:13mm 12mm}*{box-sizing:border-box}body{font:10pt/1.35 Arial,sans-serif;color:#202b39;background:white;margin:0}' +
+        'h1{font-size:16pt;margin:0 0 9mm}table{width:100%;border-collapse:collapse;table-layout:fixed}thead{display:table-header-group}' +
+        'th{text-align:left;border-bottom:2px solid #65717d;padding:6pt 7pt}td{vertical-align:top;border-bottom:1px solid #dee2e7;padding:6pt 7pt;overflow-wrap:anywhere}' +
+        'tr{break-inside:avoid;page-break-inside:avoid}thead tr{break-after:avoid}' +
+        '</style></head><body><h1>Test Information Framework (TIF)</h1>' + clean.outerHTML + '</body></html>';
+      win.document.open(); win.document.write(html); win.document.close();
+      const doPrint = () => {
+        if (win.closed) return;
+        win.document.fonts.ready.then(() => win.requestAnimationFrame(() => win.requestAnimationFrame(() => {
+          if (!win.closed) { win.focus(); win.print(); }
+        })));
+      };
+      if (win.document.readyState === 'complete') doPrint(); else win.addEventListener('load', doPrint, { once: true });
     }
     exportMenu.addEventListener('click', e => {
       const choice = e.target.closest('button[data-export]');
